@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Developer Code Brackets Envelope -->
+    <path
+        android:pathData="M 33,34 L 18,54 L 33,74"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4"
+        android:strokeColor="#22D3EE" />
+    <path
+        android:pathData="M 75,34 L 90,54 L 75,74"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4"
+        android:strokeColor="#22D3EE" />
+    <!-- Heartbeat Pulse Wave Core -->
+    <path
+        android:pathData="M 22,54 L 38,54 L 46,28 L 56,80 L 64,40 L 71,54 L 86,54"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="5"
+        android:strokeColor="#3B82F6" />
+</vector>
