@@ -1,5 +1,6 @@
 package com.example.data.api
 
+import com.example.data.model.GitHubEvent
 import com.example.data.model.GitHubRepo
 import com.example.data.model.GitHubUser
 import retrofit2.http.GET
@@ -13,5 +14,5 @@ interface GitHubService {
     suspend fun getUserRepos(@Path("username") username: String): List<GitHubRepo>
 
     @GET("users/{username}/events")
-    suspend fun getUserEvents(@Path("username") username: String): List<Map<String, Any>>
+    suspend fun getUserEvents(@Path("username") username: String): List<GitHubEvent>
 }

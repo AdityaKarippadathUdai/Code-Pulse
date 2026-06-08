@@ -135,6 +135,15 @@ data class GitHubRepoCache(
     val htmlUrl: String
 )
 
+@Entity(tableName = "github_events_cache")
+data class GitHubEventCache(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val username: String,
+    val type: String,
+    val repoName: String,
+    val createdAt: String
+)
+
 @Entity(tableName = "goals")
 data class GoalEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,

@@ -79,6 +79,7 @@ fun MainLayout(
 
     val lcSubmissionsState = remember(savedLeetcodeUser) { repository.getLeetCodeSubmissionsFlow(savedLeetcodeUser) }.collectAsState(initial = emptyList())
     val ghReposState = remember(savedGithubUser) { repository.getGitHubReposFlow(savedGithubUser) }.collectAsState(initial = emptyList())
+    val ghEventsState = remember(savedGithubUser) { repository.getGitHubEventsFlow(savedGithubUser) }.collectAsState(initial = emptyList())
     val goalsState = repository.getGoalsFlow().collectAsState(initial = emptyList())
     val achievementsState = repository.getAchievementsFlow().collectAsState(initial = emptyList())
     val historyState = repository.getCodingHistoryFlow().collectAsState(initial = emptyList())
@@ -166,6 +167,7 @@ fun MainLayout(
                             leetcodeUser = savedLeetcodeUser,
                             lcStats = lcStatsState.value,
                             ghStats = ghStatsState.value,
+                            ghEvents = ghEventsState.value,
                             goals = goalsState.value,
                             isRefreshing = isRefreshing,
                             onRefresh = { syncTrigger() },
@@ -418,6 +420,7 @@ fun DashboardScreen(
     leetcodeUser: String,
     lcStats: LeetCodeStatsEntity?,
     ghStats: GitHubStatsEntity?,
+    ghEvents: List<GitHubEventCache>,
     goals: List<GoalEntity>,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
@@ -674,6 +677,147 @@ fun DashboardScreen(
                     .weight(1f)
                     .clickable { onNavigateToTab("insights") }
             )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Recent Repository Activity Section (GitHub Event Feed)
+        Text(
+            text = "Recent Repository Activity",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (ghEvents.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Filled.Source,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No recent GitHub activity cached.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    ghEvents.take(5).forEachIndexed { index, event ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val (icon, tint) = when (event.type) {
+                                "PushEvent" -> Icons.Filled.CloudUpload to MaterialTheme.colorScheme.primary
+                                "PullRequestEvent" -> Icons.Filled.MergeType to MaterialTheme.colorScheme.secondary
+                                "CreateEvent" -> Icons.Filled.AddBox to MaterialTheme.colorScheme.tertiary
+                                "IssuesEvent" -> Icons.Filled.BugReport to Color(0xFFEF4444)
+                                "WatchEvent" -> Icons.Filled.Star to Color(0xFFFBBF24)
+                                else -> Icons.Filled.Code to MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(tint.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = event.type,
+                                    tint = tint,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = when (event.type) {
+                                        "PushEvent" -> "Pushed commits to"
+                                        "PullRequestEvent" -> "Opened pull request in"
+                                        "CreateEvent" -> "Created repository/branch"
+                                        "IssuesEvent" -> "Opened issue in"
+                                        "WatchEvent" -> "Starred repository"
+                                        else -> "Activity in"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                                Text(
+                                    text = event.repoName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            val formattedTime = remember(event.createdAt) {
+                                try {
+                                    val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                                    inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+                                    val date = inputFormat.parse(event.createdAt)
+                                    if (date != null) {
+                                        val diff = System.currentTimeMillis() - date.time
+                                        when {
+                                            diff < 60000 -> "just now"
+                                            diff < 3600000 -> "${diff / 60000}m ago"
+                                            diff < 86400000 -> "${diff / 3600000}h ago"
+                                            else -> "${diff / 86400000}d ago"
+                                        }
+                                    } else {
+                                        event.createdAt.take(10)
+                                    }
+                                } catch (e: Exception) {
+                                    event.createdAt.take(10)
+                                }
+                            }
+
+                            Text(
+                                text = formattedTime,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                        if (index < minOf(ghEvents.size, 5) - 1) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

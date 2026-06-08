@@ -66,6 +66,21 @@ interface GitHubRepoDao {
 }
 
 @Dao
+interface GitHubEventDao {
+    @Query("SELECT * FROM github_events_cache WHERE username = :username ORDER BY id DESC")
+    fun getEvents(username: String): Flow<List<GitHubEventCache>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertEvents(events: List<GitHubEventCache>)
+
+    @Query("DELETE FROM github_events_cache WHERE username = :username")
+    suspend fun clearEvents(username: String)
+
+    @Query("DELETE FROM github_events_cache")
+    suspend fun clearAll()
+}
+
+@Dao
 interface GoalDao {
     @Query("SELECT * FROM goals ORDER BY createdTime DESC")
     fun getAllGoals(): Flow<List<GoalEntity>>
@@ -125,6 +140,7 @@ interface CodingHistoryDao {
         LeetCodeSubmissionCache::class,
         GitHubStatsEntity::class,
         GitHubRepoCache::class,
+        GitHubEventCache::class,
         GoalEntity::class,
         AchievementEntity::class,
         CodingHistoryEntity::class
@@ -137,6 +153,7 @@ abstract class CodePulseDatabase : RoomDatabase() {
     abstract fun leetCodeSubmissionDao(): LeetCodeSubmissionDao
     abstract fun gitHubStatsDao(): GitHubStatsDao
     abstract fun gitHubRepoDao(): GitHubRepoDao
+    abstract fun gitHubEventDao(): GitHubEventDao
     abstract fun goalDao(): GoalDao
     abstract fun achievementDao(): AchievementDao
     abstract fun codingHistoryDao(): CodingHistoryDao
