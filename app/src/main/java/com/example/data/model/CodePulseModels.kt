@@ -49,6 +49,53 @@ data class LeetCodeSubmissionsResponse(
     val submission: List<LeetCodeSubmissionDto>? = emptyList()
 )
 
+@JsonClass(generateAdapter = true)
+data class LeetCodeProfileResponse(
+    val username: String? = "",
+    val name: String? = "",
+    val avatar: String? = "",
+    val ranking: Int? = 0,
+    val reputation: Int? = 0
+)
+
+@JsonClass(generateAdapter = true)
+data class LeetCodeSolvedResponse(
+    val solvedProblem: Int? = 0,
+    val easySolved: Int? = 0,
+    val mediumSolved: Int? = 0,
+    val hardSolved: Int? = 0
+)
+
+@JsonClass(generateAdapter = true)
+data class LeetCodeContestResponse(
+    val contestAttend: Int? = 0,
+    val contestRating: Double? = 0.0,
+    val contestGlobalRanking: Int? = 0,
+    val contestTopPercentage: Double? = 0.0,
+    val contestParticipation: List<LeetCodeContestParticipation>? = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class LeetCodeContestParticipation(
+    val attended: Boolean? = false,
+    val rating: Double? = 0.0,
+    val ranking: Int? = 0,
+    val contest: LeetCodeContestDetail? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class LeetCodeContestDetail(
+    val title: String? = "",
+    val startTime: Long? = 0L
+)
+
+@JsonClass(generateAdapter = true)
+data class LeetCodeCalendarResponse(
+    val streak: Int? = 0,
+    val totalActiveDays: Int? = 0,
+    val submissionCalendar: String? = "{}"
+)
+
 // GitHub Data Models
 @JsonClass(generateAdapter = true)
 data class GitHubUser(

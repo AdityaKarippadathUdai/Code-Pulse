@@ -138,10 +138,64 @@ class CodePulseRepository(
         codingHistoryDao.insertHistory(historyList)
     }
 
+    private fun cleanLeetcodeUsername(input: String): String {
+        var str = input.trim()
+        str = str.replace("https://", "").replace("http://", "")
+        str = str.replace("leetcode.com/", "").replace("www.leetcode.com/", "")
+        if (str.startsWith("u/")) {
+            str = str.substring(2)
+        }
+        if (str.startsWith("us/")) {
+            str = str.substring(3)
+        }
+        str = str.trim { it == '/' || it.isWhitespace() }
+        
+        val queryIndex = str.indexOf('?')
+        if (queryIndex != -1) {
+            str = str.substring(0, queryIndex)
+        }
+        val hashIndex = str.indexOf('#')
+        if (hashIndex != -1) {
+            str = str.substring(0, hashIndex)
+        }
+        val lastSlashIndex = str.indexOf('/')
+        if (lastSlashIndex != -1) {
+            str = str.substring(0, lastSlashIndex)
+        }
+        return str.trim()
+    }
+
+    private fun cleanGithubUsername(input: String): String {
+        var str = input.trim()
+        str = str.replace("https://", "").replace("http://", "")
+        str = str.replace("github.com/", "").replace("www.github.com/", "")
+        str = str.trim { it == '/' || it.isWhitespace() }
+        
+        val queryIndex = str.indexOf('?')
+        if (queryIndex != -1) {
+            str = str.substring(0, queryIndex)
+        }
+        val hashIndex = str.indexOf('#')
+        if (hashIndex != -1) {
+            str = str.substring(0, hashIndex)
+        }
+        val lastSlashIndex = str.indexOf('/')
+        if (lastSlashIndex != -1) {
+            str = str.substring(0, lastSlashIndex)
+        }
+        return str.trim()
+    }
+
     // Sync Data
     suspend fun syncUserData(githubUsername: String, leetcodeUsername: String) = withContext(Dispatchers.IO) {
-        val resultGh = runCatching { fetchRealOrSimulatedGitHub(githubUsername) }
-        val resultLc = runCatching { fetchRealOrSimulatedLeetCode(leetcodeUsername) }
+        val cleanGh = cleanGithubUsername(githubUsername)
+        val cleanLc = cleanLeetcodeUsername(leetcodeUsername)
+
+        prefs.setGithubUsername(cleanGh)
+        prefs.setLeetcodeUsername(cleanLc)
+
+        val resultGh = runCatching { fetchRealOrSimulatedGitHub(cleanGh) }
+        val resultLc = runCatching { fetchRealOrSimulatedLeetCode(cleanLc) }
 
         if (resultGh.isFailure) {
             Log.e("CodePulseRepository", "GitHub sync failed, using mock data", resultGh.exceptionOrNull())
@@ -315,17 +369,119 @@ class CodePulseRepository(
         if (username.isBlank()) return
 
         val rng = Random(username.hashCode() + 1)
-        val easy = rng.nextInt(35, 150)
-        val medium = rng.nextInt(20, 220)
-        val hard = rng.nextInt(5, 50)
-        val total = easy + medium + hard
-        val rank = rng.nextInt(5000, 500000)
-        val rep = rng.nextInt(10, 300)
-        val streak = rng.nextInt(1, 45)
-        val longStreak = maxOf(streak, rng.nextInt(20, 95))
-        val rating = rng.nextInt(1400, 2400)
-        val globalRank = rng.nextInt(2000, 80000)
-        val attended = rng.nextInt(1, 30)
+
+        // 1. Profile information (ranking, reputation, avatar)
+        val realProfile = try {
+            leetcodeService.getUserProfile(username)
+        } catch (e: Exception) {
+            Log.w("CodePulseRepository", "Failed to fetch LeetCode profile for $username: ${e.localizedMessage}")
+            null
+        }
+        val rank = realProfile?.ranking ?: rng.nextInt(50000, 500000)
+        val rep = realProfile?.reputation ?: rng.nextInt(10, 300)
+        val avatar = if (!realProfile?.avatar.isNullOrBlank()) realProfile.avatar!! else "https://picsum.photos/seed/leetcode_$username/150"
+
+        // 2. Solved categories (easy, medium, hard, total)
+        val realSolved = try {
+            leetcodeService.getUserSolved(username)
+        } catch (e: Exception) {
+            Log.w("CodePulseRepository", "Failed to fetch LeetCode solved count for $username: ${e.localizedMessage}")
+            null
+        }
+        val easy = realSolved?.easySolved ?: rng.nextInt(35, 150)
+        val medium = realSolved?.mediumSolved ?: rng.nextInt(20, 220)
+        val hard = realSolved?.hardSolved ?: rng.nextInt(5, 50)
+        val total = realSolved?.solvedProblem ?: (easy + medium + hard)
+
+        // 3. Streak and active days from calendar
+        val realCalendar = try {
+            leetcodeService.getUserCalendar(username)
+        } catch (e: Exception) {
+            Log.w("CodePulseRepository", "Failed to fetch LeetCode calendar for $username: ${e.localizedMessage}")
+            null
+        }
+        val streak = realCalendar?.streak ?: rng.nextInt(1, 45)
+        val longStreak = maxOf(streak, realCalendar?.totalActiveDays ?: rng.nextInt(20, 95))
+
+        val heatmapJson = if (realCalendar != null && !realCalendar.submissionCalendar.isNullOrBlank()) {
+            try {
+                val calendarMap = mutableMapOf<String, Int>()
+                val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val cleanJson = realCalendar.submissionCalendar.trim { it == '{' || it == '}' || it.isWhitespace() }
+                if (cleanJson.isNotBlank()) {
+                    cleanJson.split(",").forEach { entry ->
+                        val parts = entry.split(":")
+                        if (parts.size >= 2) {
+                            val timestampStr = parts[0].replace("\"", "").trim()
+                            val countStr = parts[1].replace("\"", "").trim()
+                            val timestamp = timestampStr.toLongOrNull()
+                            val count = countStr.toIntOrNull()
+                            if (timestamp != null && count != null) {
+                                val dateStr = sdfDate.format(Date(timestamp * 1000L))
+                                calendarMap[dateStr] = count
+                            }
+                        }
+                    }
+                }
+                if (calendarMap.isNotEmpty()) {
+                    calendarMap.entries.joinToString(",") { "${it.key}:${it.value}" }
+                } else {
+                    ""
+                }
+            } catch (e: Exception) {
+                Log.w("CodePulseRepository", "Failed parsing submissionCalendar: ${e.localizedMessage}")
+                ""
+            }
+        } else {
+            ""
+        }
+
+        val finalHeatmapJson = if (heatmapJson.isNotBlank()) {
+            heatmapJson
+        } else {
+            val mockHeatmap = mutableMapOf<String, Int>()
+            val dateSdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val curCal = Calendar.getInstance()
+            curCal.add(Calendar.DAY_OF_YEAR, -50)
+            for (i in 1..50) {
+                val dateStr = dateSdf.format(curCal.time)
+                if (rng.nextFloat() > 0.4f) {
+                    mockHeatmap[dateStr] = rng.nextInt(1, 6)
+                }
+                curCal.add(Calendar.DAY_OF_YEAR, 1)
+            }
+            mockHeatmap.entries.joinToString(",") { "${it.key}:${it.value}" }
+        }
+
+        // 4. Contest Rating
+        val realContest = try {
+            leetcodeService.getUserContest(username)
+        } catch (e: Exception) {
+            Log.w("CodePulseRepository", "Failed to fetch LeetCode contest details for $username: ${e.localizedMessage}")
+            null
+        }
+        val rating = realContest?.contestRating?.toInt() ?: rng.nextInt(1400, 2400)
+        val globalRank = realContest?.contestGlobalRanking ?: rng.nextInt(2000, 80000)
+        val attended = realContest?.contestAttend ?: rng.nextInt(1, 30)
+
+        // Rating Evolution JSON
+        val ratingHistory = if (realContest != null && !realContest.contestParticipation.isNullOrEmpty()) {
+            val history = realContest.contestParticipation!!.filter { it.attended == true && it.rating != null && it.contest != null }
+            if (history.isNotEmpty()) {
+                val listStrings = history.map {
+                    "{\"contest\":\"${it.contest!!.title ?: ""}\",\"rating\":${it.rating!!.toInt()}}"
+                }
+                listStrings.joinToString(",", prefix = "[", postfix = "]")
+            } else {
+                (1..attended).map { step ->
+                    "{\"contest\":\"Weekly Contest $step\",\"rating\":${1400 + (rating - 1400) * step / attended}}"
+                }.joinToString(",", prefix = "[", postfix = "]")
+            }
+        } else {
+            (1..attended).map { step ->
+                "{\"contest\":\"Weekly Contest $step\",\"rating\":${1400 + (rating - 1400) * step / attended}}"
+            }.joinToString(",", prefix = "[", postfix = "]")
+        }
 
         // Try to fetch real submission history from the LeetCode API service
         val submissionsList = try {
@@ -382,29 +538,11 @@ class CodePulseRepository(
             }
         }
 
-        // Contest history JSON
-        val ratingHistory = (1..attended).map { step ->
-            mapOf("contest" to "Weekly Contest $step", "rating" to (1400 + (rating - 1400) * step / attended))
-        }.toString()
-
-        val mockHeatmap = mutableMapOf<String, Int>()
-        val dateSdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val curCal = Calendar.getInstance()
-        curCal.add(Calendar.DAY_OF_YEAR, -50)
-        for (i in 1..50) {
-            val dateStr = dateSdf.format(curCal.time)
-            if (rng.nextFloat() > 0.4f) {
-                mockHeatmap[dateStr] = rng.nextInt(1, 6)
-            }
-            curCal.add(Calendar.DAY_OF_YEAR, 1)
-        }
-        val heatmapJson = mockHeatmap.entries.joinToString(",") { "${it.key}:${it.value}" }
-
         val entity = LeetCodeStatsEntity(
             username = username,
             ranking = rank,
             reputation = rep,
-            avatarUrl = "https://picsum.photos/seed/leetcode_$username/150",
+            avatarUrl = avatar,
             easySolved = easy,
             mediumSolved = medium,
             hardSolved = hard,
@@ -416,7 +554,7 @@ class CodePulseRepository(
             globalRanking = globalRank,
             contestAttended = attended,
             ratingHistoryJson = ratingHistory,
-            heatmapDataJson = heatmapJson
+            heatmapDataJson = finalHeatmapJson
         )
 
         leetCodeStatsDao.insertStats(entity)

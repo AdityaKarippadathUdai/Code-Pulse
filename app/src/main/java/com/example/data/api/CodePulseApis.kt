@@ -1,9 +1,6 @@
 package com.example.data.api
 
-import com.example.data.model.GitHubEvent
-import com.example.data.model.GitHubRepo
-import com.example.data.model.GitHubUser
-import com.example.data.model.LeetCodeSubmissionsResponse
+import com.example.data.model.*
 import retrofit2.http.GET
 import retrofit2.http.Path
 
@@ -19,6 +16,18 @@ interface GitHubService {
 }
 
 interface LeetCodeService {
+    @GET("{username}")
+    suspend fun getUserProfile(@Path("username") username: String): LeetCodeProfileResponse
+
+    @GET("{username}/solved")
+    suspend fun getUserSolved(@Path("username") username: String): LeetCodeSolvedResponse
+
+    @GET("{username}/contest")
+    suspend fun getUserContest(@Path("username") username: String): LeetCodeContestResponse
+
+    @GET("{username}/calendar")
+    suspend fun getUserCalendar(@Path("username") username: String): LeetCodeCalendarResponse
+
     @GET("{username}/submission")
     suspend fun getUserSubmissions(@Path("username") username: String): LeetCodeSubmissionsResponse
 }
