@@ -331,19 +331,20 @@ class CodePulseRepository(
         val submissionsList = try {
             val response = leetcodeService.getUserSubmissions(username)
             val sdfStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-            if (response.submission.isNotEmpty()) {
-                response.submission.take(15).map {
-                    val timestampLong = it.timestamp.toLongOrNull() ?: 0L
+            val subs = response.submission
+            if (subs != null && subs.isNotEmpty()) {
+                subs.take(15).map {
+                    val timestampLong = it.timestamp?.toLongOrNull() ?: 0L
                     val dateStr = if (timestampLong > 0) {
                         sdfStr.format(Date(timestampLong * 1000L))
                     } else {
-                        it.timestamp
+                        it.timestamp ?: ""
                     }
                     LeetCodeSubmissionCache(
                         username = username,
-                        title = it.title,
-                        status = it.statusDisplay,
-                        language = it.lang,
+                        title = it.title ?: "",
+                        status = it.statusDisplay ?: "",
+                        language = it.lang ?: "",
                         submissionDate = dateStr
                     )
                 }

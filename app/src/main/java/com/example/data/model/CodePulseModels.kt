@@ -37,16 +37,16 @@ data class LeetCodeSubmission(
 
 @JsonClass(generateAdapter = true)
 data class LeetCodeSubmissionDto(
-    val title: String,
-    val statusDisplay: String,
-    val lang: String,
-    val timestamp: String
+    val title: String? = "",
+    val statusDisplay: String? = "",
+    val lang: String? = "",
+    val timestamp: String? = ""
 )
 
 @JsonClass(generateAdapter = true)
 data class LeetCodeSubmissionsResponse(
-    val count: Int,
-    val submission: List<LeetCodeSubmissionDto>
+    val count: Int? = 0,
+    val submission: List<LeetCodeSubmissionDto>? = emptyList()
 )
 
 // GitHub Data Models

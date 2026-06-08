@@ -1255,34 +1255,40 @@ fun DistributionLegendRow(label: String, value: Int, color: Color) {
 
 @Composable
 fun HeatmapGrid(cells: List<Pair<String, Int>>) {
-    // Generate a fixed size representing 50 boxes
     val totalBoxes = 56
     val currentThemeColor = MaterialTheme.colorScheme.primary
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(8),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(95.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        items(totalBoxes) { index ->
-            val contributionCount = if (index < cells.size) cells[index].second else 0
+        val rowsCount = 7
+        val columnsCount = 8
+        for (r in 0 until rowsCount) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                for (c in 0 until columnsCount) {
+                    val index = r * columnsCount + c
+                    val contributionCount = if (index < cells.size) cells[index].second else 0
 
-            val boxColor = when {
-                contributionCount >= 5 -> currentThemeColor
-                contributionCount >= 3 -> currentThemeColor.copy(alpha = 0.7f)
-                contributionCount >= 1 -> currentThemeColor.copy(alpha = 0.4f)
-                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    val boxColor = when {
+                        contributionCount >= 5 -> currentThemeColor
+                        contributionCount >= 3 -> currentThemeColor.copy(alpha = 0.7f)
+                        contributionCount >= 1 -> currentThemeColor.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(boxColor)
+                    )
+                }
             }
-
-            Box(
-                modifier = Modifier
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(boxColor)
-            )
         }
     }
 }
@@ -1839,53 +1845,59 @@ fun InsightsScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(390.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(achievements.size) { index ->
-                val badge = achievements[index]
-                Card(
+            val rows = achievements.chunked(2)
+            rows.forEach { rowBadges ->
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (badge.isUnlocked) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                        }
-                    )
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = if (badge.isUnlocked) Icons.Filled.Stars else Icons.Filled.Lock,
-                            contentDescription = badge.title,
-                            tint = if (badge.isUnlocked) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = badge.title,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Text(
-                            text = badge.description,
-                            fontSize = 11.sp,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    rowBadges.forEach { badge ->
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (badge.isUnlocked) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                }
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (badge.isUnlocked) Icons.Filled.Stars else Icons.Filled.Lock,
+                                    contentDescription = badge.title,
+                                    tint = if (badge.isUnlocked) Color(0xFFFBBF24) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(36.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = badge.title,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = badge.description,
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                    if (rowBadges.size < 2) {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
