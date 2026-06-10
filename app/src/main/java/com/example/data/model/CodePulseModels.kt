@@ -309,15 +309,49 @@ data class VaultRepositoryEntity(
 
 @Entity(tableName = "vault_files")
 data class VaultFileEntity(
-    @PrimaryKey val pathId: String, // "repo_id/path/to/file"
+    @PrimaryKey val id: String,
+    val pathId: String,
     val repoId: Int,
+    val repositoryId: Int,
     val name: String,
-    val path: String, // e.g. "Folder/Sub/file.kt"
-    val parentPath: String, // e.g. "Folder/Sub"
-    val type: String, // "file" or "dir"
+    val fileName: String,
+    val path: String,
+    val parentPath: String,
+    val type: String,
+    val extension: String,
     val size: Long = 0L,
+    val sha: String? = null,
     val downloadUrl: String? = null,
-    val codeContent: String? = null // Fully cached content
-)
+    val lastModified: Long = 0L,
+    val codeContent: String? = null
+) {
+    constructor(
+        pathId: String,
+        repoId: Int,
+        name: String,
+        path: String,
+        parentPath: String,
+        type: String,
+        size: Long = 0L,
+        downloadUrl: String? = null,
+        codeContent: String? = null
+    ) : this(
+        id = pathId,
+        pathId = pathId,
+        repoId = repoId,
+        repositoryId = repoId,
+        name = name,
+        fileName = name,
+        path = path,
+        parentPath = parentPath,
+        type = type,
+        extension = if (type == "dir") "folder" else if (path.contains('.')) path.substringAfterLast('.').lowercase() else "",
+        size = size,
+        sha = "local_seed",
+        downloadUrl = downloadUrl,
+        lastModified = System.currentTimeMillis() - 10800000,
+        codeContent = codeContent
+    )
+}
 
 

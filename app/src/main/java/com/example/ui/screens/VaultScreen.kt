@@ -35,6 +35,9 @@ import com.example.data.model.VaultFileEntity
 import com.example.data.model.VaultRepositoryEntity
 import com.example.data.pref.CodePulsePrefs
 import com.example.data.repository.CodePulseRepository
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.text.font.FontStyle
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -191,8 +194,8 @@ fun VaultScreen(
                         }
                     )
                 } else if (activeCodeFile != null) {
-                    // 2. Code Viewer Screen
-                    VaultCodeViewer(
+                    // 2. Multi-format Document and Code Previewer
+                    VaultFilePreviewer(
                         file = activeCodeFile,
                         token = personalAccessToken.ifBlank { null },
                         onCacheClicked = {
@@ -207,7 +210,7 @@ fun VaultScreen(
                     VaultExplorer(
                         repo = activeRepo!!,
                         currentPath = currentFolderPath,
-                        items = currentLevelFiles,
+                        repoFiles = repoFiles,
                         onFolderClick = { folder ->
                             currentFolderPath = folder
                         },
@@ -808,17 +811,61 @@ fun LanguageProgressBar(
     }
 }
 
-// ---------------- EXPLORER DASHBOARD LAYER ----------------
-
+// ---------------- EXPLORER DASHBOARD LAYER ----------
 @Composable
 fun VaultExplorer(
     repo: VaultRepositoryEntity,
     currentPath: String,
-    items: List<VaultFileEntity>,
+    repoFiles: List<VaultFileEntity>,
     onFolderClick: (String) -> Unit,
     onFileClick: (String) -> Unit,
     onBreadcrumbClick: (String) -> Unit
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedExtension by remember { mutableStateOf<String?>(null) }
+    var sortOption by remember { mutableStateOf("NAME") } // "NAME", "SIZE", "DATE", "TYPE"
+
+    // Process list dynamically in UI
+    val availableExtensions = remember(repoFiles) {
+        repoFiles
+            .filter { it.type == "file" && it.extension.isNotBlank() }
+            .map { it.extension.lowercase() }
+            .distinct()
+            .sorted()
+    }
+
+    val filteredAndSortedFiles = remember(repoFiles, currentPath, searchQuery, selectedExtension, sortOption) {
+        // 1. Initial filter based on search query vs folder depth browsing
+        var list = if (searchQuery.isNotBlank()) {
+            repoFiles.filter { file ->
+                file.type == "file" && (
+                    file.fileName.contains(searchQuery, ignoreCase = true) ||
+                    file.path.contains(searchQuery, ignoreCase = true)
+                )
+            }
+        } else {
+            repoFiles.filter { file ->
+                file.parentPath == currentPath
+            }
+        }
+
+        // 2. Filter by selected extension if active
+        if (selectedExtension != null) {
+            list = list.filter { file ->
+                file.type == "file" && file.extension.equals(selectedExtension, ignoreCase = true)
+            }
+        }
+
+        // 3. Sort standard items
+        when (sortOption) {
+            "NAME" -> list.sortedWith(compareBy<VaultFileEntity> { it.type != "dir" }.thenBy { it.fileName.lowercase() })
+            "SIZE" -> list.sortedWith(compareBy<VaultFileEntity> { it.type != "dir" }.thenByDescending { it.size })
+            "DATE" -> list.sortedWith(compareBy<VaultFileEntity> { it.type != "dir" }.thenByDescending { it.lastModified })
+            "TYPE" -> list.sortedWith(compareBy<VaultFileEntity> { it.type != "dir" }.thenBy { it.extension })
+            else -> list
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // Vault repo quick dashboard metadata
         Box(
@@ -855,7 +902,7 @@ fun VaultExplorer(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Most used components focus heavily on ${repo.mostUsedLanguage}. Main active operations operate out of [${repo.defaultBranch}] branch index. Local device backup represents complete structures.",
+                    text = "Sync and browse PDF, Word DOCX, Markdown notebooks, and source codes fully cached on SQLite locally for offline studies.",
                     fontSize = 12.sp,
                     color = Color.Gray
                 )
@@ -881,13 +928,137 @@ fun VaultExplorer(
             }
         }
 
-        // Breadcrumbs Row
-        VaultBreadcrumbs(currentPath = currentPath, onBreadcrumbClick = onBreadcrumbClick)
+        // Search & Filter Panel
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF0F141C))
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search files across entire repo...", color = Color.Gray) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color(0xFF30363D)
+                ),
+                leadingIcon = { Icon(Icons.Filled.Search, "Search", tint = Color.Gray) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Close, "Clear", tint = Color.Gray)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("document_library_search_input")
+            )
+
+            // Dynamic Extension Filter Row
+            if (availableExtensions.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selectedExtension == null) MaterialTheme.colorScheme.primary else Color(0xFF21262D))
+                                .clickable { selectedExtension = null }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "All formats",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    items(availableExtensions) { ext ->
+                        val isSelected = selectedExtension == ext
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF21262D))
+                                .clickable { selectedExtension = ext }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = ".${ext.uppercase()}",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Sorting Panel Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Sort by: ", color = Color.Gray, fontSize = 12.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+
+                val sortOptions = listOf("NAME" to "Name", "SIZE" to "Size", "DATE" to "Date", "TYPE" to "Type")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(sortOptions) { (opt, label) ->
+                        val isSelected = sortOption == opt
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color(0xFF21262D))
+                                .clickable { sortOption = opt }
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Breadcrumbs Row (Only if we aren't searching, to preserve folder layout hierarchy)
+        if (searchQuery.isBlank()) {
+            VaultBreadcrumbs(currentPath = currentPath, onBreadcrumbClick = onBreadcrumbClick)
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF161B22))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Global Search Results for \"$searchQuery\"",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
 
         HorizontalDivider(color = Color(0xFF30363D))
 
         // Files lists
-        if (items.isEmpty()) {
+        if (filteredAndSortedFiles.isEmpty()) {
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -903,9 +1074,10 @@ fun VaultExplorer(
                     modifier = Modifier.size(64.dp)
                 )
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("Directory is empty", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("No files matched filters", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "This sub-level folder contains no files. Try to synchronize the repository to update file arrays recursively.",
+                    "Try revising your search string, checking specific format filters or sync the repository metadata.",
                     color = Color.Gray,
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -917,14 +1089,14 @@ fun VaultExplorer(
                     .weight(1f)
                     .fillMaxSize()
             ) {
-                items(items, key = { it.pathId }) { file ->
+                items(filteredAndSortedFiles, key = { it.id }) { file ->
                     VaultFileRow(
                         file = file,
                         onClick = {
                             if (file.type == "dir") {
                                 onFolderClick(file.path)
                             } else {
-                                onFileClick(file.pathId)
+                                onFileClick(file.id)
                             }
                         }
                     )
@@ -984,10 +1156,27 @@ fun VaultBreadcrumbs(
 }
 
 @Composable
+fun getFileIconAndColor(extension: String, isFolder: Boolean): Pair<ImageVector, Color> {
+    if (isFolder) {
+        return Icons.Filled.Folder to Color(0xFFE2B93B)
+    }
+    return when (extension.lowercase()) {
+        "pdf" -> Icons.Filled.Book to Color(0xFFF43F5E)
+        "docx" -> Icons.Filled.Description to Color(0xFF2563EB)
+        "md" -> Icons.Filled.MenuBook to Color(0xFF0EA5E9)
+        "txt" -> Icons.Filled.Feed to Color(0xFF64748B)
+        "kt", "java", "cpp", "py", "js", "ts", "sql", "json", "xml", "yaml" -> Icons.Filled.Code to Color(0xFF10B981)
+        else -> Icons.Filled.Description to Color(0xFF8B949E)
+    }
+}
+
+@Composable
 fun VaultFileRow(
     file: VaultFileEntity,
     onClick: () -> Unit
 ) {
+    val (icon, tintColor) = getFileIconAndColor(file.extension, file.type == "dir")
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -996,9 +1185,9 @@ fun VaultFileRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = if (file.type == "dir") Icons.Filled.Folder else Icons.Filled.Description,
+            imageVector = icon,
             contentDescription = null,
-            tint = if (file.type == "dir") Color(0xFFE2B93B) else Color(0xFF8B949E),
+            tint = tintColor,
             modifier = Modifier.size(24.dp)
         )
 
@@ -1006,7 +1195,7 @@ fun VaultFileRow(
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = file.name,
+                text = file.fileName,
                 color = Color.White,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -1016,8 +1205,8 @@ fun VaultFileRow(
 
             if (file.type == "file") {
                 Text(
-                    text = "Size: ${formatSize(file.size)}  •  ${if (file.codeContent != null) "Offline Cached" else "Cloud (Needs download)"}",
-                    color = if (file.codeContent != null) Color(0xFF3FB950) else Color.Gray,
+                    text = "Size: ${formatSize(file.size)}  •  ${if (file.codeContent != null) "Downloaded" else "Cloud Stream"}",
+                    color = if (file.codeContent != null) Color(0xFF3FB950) else Color(0xFFE2B93B),
                     fontSize = 11.sp
                 )
             }
@@ -1032,23 +1221,285 @@ fun VaultFileRow(
     }
 }
 
-// ---------------- MONOCHROME OFFLINE CODE VIEWER ----------------
+@Composable
+fun PdfPreviewer(base64Data: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var bitmaps by remember(base64Data) { mutableStateOf<List<android.graphics.Bitmap>>(emptyList()) }
+    var errorState by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(base64Data) {
+        try {
+            val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+            val tempFile = java.io.File(context.cacheDir, "pdf_preview_temp.pdf")
+            tempFile.writeBytes(bytes)
+
+            val pfd = android.os.ParcelFileDescriptor.open(tempFile, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = android.graphics.pdf.PdfRenderer(pfd)
+            val pageCount = renderer.pageCount
+            val loadedBitmaps = mutableListOf<android.graphics.Bitmap>()
+
+            // Render up to first 10 pages for document index studies
+            val maxPages = minOf(pageCount, 10)
+            for (i in 0 until maxPages) {
+                val page = renderer.openPage(i)
+                val widthVal = page.width * 2
+                val heightVal = page.height * 2
+                val bitmap = android.graphics.Bitmap.createBitmap(widthVal, heightVal, android.graphics.Bitmap.Config.ARGB_8888)
+
+                val canvas = android.graphics.Canvas(bitmap)
+                canvas.drawColor(android.graphics.Color.WHITE)
+
+                page.render(bitmap, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                loadedBitmaps.add(bitmap)
+                page.close()
+            }
+            renderer.close()
+            pfd.close()
+            bitmaps = loadedBitmaps
+        } catch (e: Exception) {
+            e.printStackTrace()
+            errorState = e.message ?: "Failed to render PDF"
+        }
+    }
+
+    if (errorState != null) {
+        Column(
+            modifier = modifier.fillMaxSize().padding(32.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(Icons.Filled.Error, contentDescription = "Error", tint = Color.Red, modifier = Modifier.size(48.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("PDF Render Issue", color = Color.White, fontWeight = FontWeight.Bold)
+            Text(errorState ?: "", color = Color.Gray, textAlign = TextAlign.Center, fontSize = 12.sp)
+        }
+    } else if (bitmaps.isEmpty()) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F141C))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(bitmaps) { bitmap ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFF30363D)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                ) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = "PDF Page",
+                        modifier = Modifier.fillMaxWidth().aspectRatio(bitmap.width.toFloat() / bitmap.height.toFloat())
+                    )
+                }
+            }
+        }
+    }
+}
+
+fun extractDocxText(base64Data: String): String {
+    return try {
+        val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
+        val zipStream = java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(bytes))
+        var entry = zipStream.nextEntry
+        var documentXml: String? = null
+        while (entry != null) {
+            if (entry.name == "word/document.xml") {
+                documentXml = zipStream.bufferedReader().use { it.readText() }
+                break
+            }
+            entry = zipStream.nextEntry
+        }
+        zipStream.close()
+
+        if (documentXml != null) {
+            val ParagraphRegex = Regex("<w:p[ >].*?</w:p>")
+            val TextRegex = Regex("<w:t[ >](.*?)</w:t>")
+
+            val paragraphs = ParagraphRegex.findAll(documentXml).map { pResult ->
+                val runText = TextRegex.findAll(pResult.value).map { tResult ->
+                    val value = tResult.groupValues[1]
+                    value.replace("&amp;", "&")
+                        .replace("&lt;", "<")
+                        .replace("&gt;", ">")
+                        .replace("&quot;", "\"")
+                        .replace("&apos;", "'")
+                }.joinToString("")
+                runText
+            }.filter { it.isNotBlank() }.toList()
+
+            if (paragraphs.isNotEmpty()) {
+                paragraphs.joinToString("\n\n")
+            } else {
+                documentXml.replace(Regex("<.*?>"), " ").trim()
+            }
+        } else {
+            "No word/document.xml entry found inside Word Document ZIP."
+        }
+    } catch (e: Exception) {
+        "Failed to convert DOCX text: ${e.message}"
+    }
+}
+
+fun formatBoldItalicText(text: String): androidx.compose.ui.text.AnnotatedString {
+    val builder = androidx.compose.ui.text.AnnotatedString.Builder()
+    var i = 0
+    while (i < text.length) {
+        if (text.startsWith("**", i)) {
+            val end = text.indexOf("**", i + 2)
+            if (end != -1) {
+                builder.pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold, color = Color.White))
+                builder.append(text.substring(i + 2, end))
+                builder.pop()
+                i = end + 2
+                continue
+            }
+        } else if (text.startsWith("*", i)) {
+            val end = text.indexOf("*", i + 1)
+            if (end != -1) {
+                builder.pushStyle(androidx.compose.ui.text.SpanStyle(fontStyle = FontStyle.Italic))
+                builder.append(text.substring(i + 1, end))
+                builder.pop()
+                i = end + 1
+                continue
+            }
+        }
+        builder.append(text[i])
+        i++
+    }
+    return builder.toAnnotatedString()
+}
 
 @Composable
-fun VaultCodeViewer(
+fun MarkdownRenderer(text: String, modifier: Modifier = Modifier) {
+    val lines = text.split('\n')
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        lines.forEach { line ->
+            when {
+                line.startsWith("# ") -> {
+                    Text(
+                        text = line.substring(2),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+                    )
+                }
+                line.startsWith("## ") -> {
+                    Text(
+                        text = line.substring(3),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+                }
+                line.startsWith("### ") -> {
+                    Text(
+                        text = line.substring(4),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.LightGray,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp)
+                    )
+                }
+                line.startsWith("* ") || line.startsWith("- ") -> {
+                    Row(modifier = Modifier.padding(start = 8.dp)) {
+                        Text("• ", color = MaterialTheme.colorScheme.primary, fontSize = 14.sp)
+                        Text(
+                            text = if (line.startsWith("* ")) line.substring(2) else line.substring(2),
+                            color = Color(0xFFE6EDF0),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                line.startsWith("> ") -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF21262D))
+                            .border(BorderStroke(1.dp, Color(0xFF30363D)), RoundedCornerShape(4.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = line.substring(2),
+                            color = Color.LightGray,
+                            fontSize = 13.sp,
+                            style = androidx.compose.ui.text.TextStyle(fontStyle = FontStyle.Italic)
+                        )
+                    }
+                }
+                else -> {
+                    if (line.isNotBlank()) {
+                        Text(
+                            text = formatBoldItalicText(line),
+                            color = Color(0xFFE6EDF0),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun highlightCode(code: String, extension: String): androidx.compose.ui.text.AnnotatedString {
+    val builder = androidx.compose.ui.text.AnnotatedString.Builder(code)
+
+    val commentRegex = Regex("//.*")
+    commentRegex.findAll(code).forEach { result ->
+        builder.addStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFF8B949E), fontStyle = FontStyle.Italic), result.range.first, result.range.last + 1)
+    }
+
+    val stringRegex = Regex("\".*?\"")
+    stringRegex.findAll(code).forEach { result ->
+        builder.addStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFFA5D6FF)), result.range.first, result.range.last + 1)
+    }
+
+    val keywords = setOf(
+        "class", "interface", "struct", "fun", "function", "def", "import", "package", "return", "if", "else",
+        "while", "for", "in", "public", "private", "protected", "void", "val", "var", "const", "let", "null", "true", "false"
+    )
+    val wordRegex = Regex("\\b[a-zA-Z_][a-zA-Z0-9_]*\\b")
+    wordRegex.findAll(code).forEach { result ->
+        if (result.value in keywords) {
+            builder.addStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFFFF7B72), fontWeight = FontWeight.Bold), result.range.first, result.range.last + 1)
+        }
+    }
+
+    return builder.toAnnotatedString()
+}
+
+@Composable
+fun VaultFilePreviewer(
     file: VaultFileEntity,
     token: String?,
     onCacheClicked: () -> Unit
 ) {
     val context = LocalContext.current
     val codeContent = file.codeContent
+    val extension = file.extension.lowercase()
+
+    var readerTextSize by remember { mutableStateOf(14.sp) }
+    var selectSerifFont by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0F141C))
     ) {
-        // Quick File metadata header
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1060,7 +1511,7 @@ fun VaultCodeViewer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("OFFLINE STORAGE STATUS", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Text(
                         text = if (codeContent != null) "100% Offline Complete" else "Cloud Stream Required",
@@ -1070,14 +1521,36 @@ fun VaultCodeViewer(
                     )
                 }
 
-                Row {
-                    if (codeContent != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (codeContent != null && (extension == "txt" || extension == "md" || extension == "docx")) {
+                        IconButton(onClick = {
+                            readerTextSize = when (readerTextSize) {
+                                12.sp -> 14.sp
+                                14.sp -> 18.sp
+                                18.sp -> 22.sp
+                                else -> 12.sp
+                            }
+                        }) {
+                            Icon(Icons.Filled.TextFormat, "Text Size", tint = Color.LightGray)
+                        }
+
+                        IconButton(onClick = { selectSerifFont = !selectSerifFont }) {
+                            Icon(
+                                imageVector = if (selectSerifFont) Icons.Filled.FontDownload else Icons.Outlined.FontDownload,
+                                contentDescription = "Font Type",
+                                tint = Color.LightGray
+                            )
+                        }
+                    }
+
+                    if (codeContent != null && extension != "pdf") {
                         IconButton(
                             onClick = {
+                                val textToCopy = if (extension == "docx") extractDocxText(codeContent) else codeContent
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Source Code", codeContent)
+                                val clip = ClipData.newPlainText("Vault File Content", textToCopy)
                                 clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Code copied to clipboard", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                             }
                         ) {
                             Icon(Icons.Filled.ContentCopy, "Copy", tint = Color.LightGray)
@@ -1100,7 +1573,7 @@ fun VaultCodeViewer(
                             tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (codeContent != null) "Sync Again" else "Download Code", fontSize = 12.sp, color = Color.White)
+                        Text(if (codeContent != null) "Re-Sync" else "Download", fontSize = 12.sp, color = Color.White)
                     }
                 }
             }
@@ -1108,9 +1581,7 @@ fun VaultCodeViewer(
 
         HorizontalDivider(color = Color(0xFF30363D))
 
-        // Code Area
         if (codeContent == null) {
-            // Uncached code view placeholder
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -1129,7 +1600,7 @@ fun VaultCodeViewer(
                 Text("Content not cached offline", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "To open other directories or specific file content fully offline, you can retrieve the file text directly using your token.",
+                    "To read documents and code lists fully offline, you can retrieve the file text directly using your token.",
                     color = Color.Gray,
                     textAlign = TextAlign.Center,
                     fontSize = 13.sp
@@ -1140,23 +1611,70 @@ fun VaultCodeViewer(
                 }
             }
         } else {
-            // Beautiful code display with scroll
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .horizontalScroll(rememberScrollState())
-                    .background(Color(0xFF0F141C))
-                    .padding(16.dp)
             ) {
-                Text(
-                    text = codeContent,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    color = Color(0xFFE6EDF0),
-                    modifier = Modifier.fillMaxSize()
-                )
+                when (extension) {
+                    "pdf" -> {
+                        PdfPreviewer(base64Data = codeContent, modifier = Modifier.fillMaxSize())
+                    }
+                    "docx" -> {
+                        val parsedText = remember(codeContent) { extractDocxText(codeContent) }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = parsedText,
+                                fontSize = readerTextSize,
+                                fontFamily = if (selectSerifFont) FontFamily.Serif else FontFamily.SansSerif,
+                                color = Color(0xFFE6EDF0),
+                                lineHeight = (readerTextSize.value * 1.5).sp
+                            )
+                        }
+                    }
+                    "md" -> {
+                        MarkdownRenderer(text = codeContent, modifier = Modifier.fillMaxSize())
+                    }
+                    "txt" -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = codeContent,
+                                fontSize = readerTextSize,
+                                fontFamily = if (selectSerifFont) FontFamily.Serif else FontFamily.SansSerif,
+                                color = Color(0xFFE6EDF0),
+                                lineHeight = (readerTextSize.value * 1.5).sp
+                            )
+                        }
+                    }
+                    else -> {
+                        val highlighted = remember(codeContent) { highlightCode(codeContent, extension) }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState())
+                                .background(Color(0xFF0F141C))
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = highlighted,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
             }
         }
     }

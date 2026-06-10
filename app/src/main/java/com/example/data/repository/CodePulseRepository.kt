@@ -1175,16 +1175,23 @@ class CodePulseRepository(
                     "https://raw.githubusercontent.com/$owner/$repo/$branchName/$path"
                 } else null
 
+                val ext = if (type == "dir") "folder" else if (path.contains('.')) path.substringAfterLast('.').lowercase() else ""
                 fileEntities.add(
                     VaultFileEntity(
+                        id = "${repoId}_${path}",
                         pathId = "${repoId}_${path}",
                         repoId = repoId,
+                        repositoryId = repoId,
                         name = name,
+                        fileName = name,
                         path = path,
                         parentPath = parentPath,
                         type = type,
+                        extension = ext,
                         size = entry.size ?: 0L,
+                        sha = entry.sha,
                         downloadUrl = downloadUrl,
+                        lastModified = System.currentTimeMillis(),
                         codeContent = null
                     )
                 )
