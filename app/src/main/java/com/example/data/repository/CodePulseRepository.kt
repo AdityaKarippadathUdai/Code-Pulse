@@ -24,32 +24,11 @@ class CodePulseRepository(
     private val database: CodePulseDatabase,
     private val prefs: CodePulsePrefs
 ) {
-    private val githubService: GitHubService
-    private val leetcodeService: LeetCodeService
+    private val githubService: GitHubService = com.example.data.di.NetworkModule.githubService
+    private val leetcodeService: LeetCodeService = com.example.data.di.NetworkModule.leetcodeService
 
     init {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        }
-        val client = OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .build()
-
-        val githubRetrofit = Retrofit.Builder()
-            .baseUrl("https://api.github.com/")
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create())
-            .build()
-
-        githubService = githubRetrofit.create(GitHubService::class.java)
-
-        val leetcodeRetrofit = Retrofit.Builder()
-            .baseUrl("https://alfa-leetcode-api.onrender.com/")
-            .client(client)
-            .addConverterFactory(MoshiConverterFactory.create())
-            .build()
-
-        leetcodeService = leetcodeRetrofit.create(LeetCodeService::class.java)
+        // Services resolved via NetworkModule DI
     }
 
     // DAOs

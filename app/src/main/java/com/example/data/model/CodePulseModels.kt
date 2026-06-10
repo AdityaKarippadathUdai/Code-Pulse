@@ -121,7 +121,13 @@ data class GitHubRepo(
     val forks_count: Int = 0,
     val watchers_count: Int = 0,
     val language: String? = null,
-    val html_url: String = ""
+    val html_url: String = "",
+    val private: Boolean = false,
+    val fork: Boolean = false,
+    val archived: Boolean = false,
+    val updated_at: String? = null,
+    val default_branch: String? = "main",
+    val owner: com.example.data.api.GitHubRepoOwner? = null
 )
 
 @JsonClass(generateAdapter = true)

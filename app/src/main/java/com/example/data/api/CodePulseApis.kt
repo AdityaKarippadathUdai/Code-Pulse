@@ -2,10 +2,8 @@ package com.example.data.api
 
 import com.example.data.model.*
 import com.squareup.moshi.JsonClass
-import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.Path
-import retrofit2.http.Query
+import okhttp3.ResponseBody
+import retrofit2.http.*
 
 interface GitHubService {
     @GET("users/{username}")
@@ -16,6 +14,11 @@ interface GitHubService {
 
     @GET("users/{username}/events")
     suspend fun getUserEvents(@Path("username") username: String): List<GitHubEvent>
+
+    @GET("user")
+    suspend fun getAuthenticatedUser(
+        @Header("Authorization") authHeader: String
+    ): GitHubUser
 
     @GET("user/repos")
     suspend fun getAuthenticatedUserRepos(
@@ -61,10 +64,22 @@ interface GitHubService {
         @Query("recursive") recursive: Int = 1,
         @Header("Authorization") authHeader: String? = null
     ): GitHubTreeResponse
+
+    @GET("rate_limit")
+    suspend fun getRateLimit(
+        @Header("Authorization") authHeader: String? = null
+    ): GitHubRateLimitResponse
+
+    @GET
+    suspend fun downloadRawFile(
+        @Url url: String,
+        @Header("Authorization") authHeader: String? = null
+    ): ResponseBody
 }
 
 @JsonClass(generateAdapter = true)
 data class GitHubCommitResponse(
+    val sha: String,
     val commit: GitHubCommitInfo
 )
 
@@ -105,7 +120,28 @@ data class GitHubRepoDetailResponse(
 
 @JsonClass(generateAdapter = true)
 data class GitHubRepoOwner(
-    val login: String
+    val login: String,
+    val avatar_url: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubRateLimitResponse(
+    val resources: GitHubRateLimitResources,
+    val rate: GitHubRateLimitInfo
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubRateLimitResources(
+    val core: GitHubRateLimitInfo,
+    val search: GitHubRateLimitInfo
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubRateLimitInfo(
+    val limit: Int,
+    val remaining: Int,
+    val reset: Long,
+    val used: Int
 )
 
 @JsonClass(generateAdapter = true)
