@@ -172,7 +172,7 @@ interface ProblemDao {
     @Query("SELECT * FROM problems WHERE favorite = 1")
     fun getFavoriteProblemsFlow(): Flow<List<ProblemEntity>>
 
-    @Query("SELECT * FROM problems INNER JOIN recently_viewed ON problems.id = recently_viewed.problemId ORDER BY recently_viewed.viewedAt DESC LIMIT 50")
+    @Query("SELECT problems.* FROM problems INNER JOIN recently_viewed ON problems.id = recently_viewed.problemId ORDER BY recently_viewed.viewedAt DESC LIMIT 50")
     fun getRecentlyViewedProblemsFlow(): Flow<List<ProblemEntity>>
 
     @Query("SELECT * FROM problems WHERE title LIKE '%' || :query || '%' OR topic LIKE '%' || :query || '%' OR language LIKE '%' || :query || '%' OR CAST(leetcodeId as TEXT) LIKE :query || '%'")
