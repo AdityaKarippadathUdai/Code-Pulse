@@ -1829,12 +1829,26 @@ fun AddRepoDialog(
                 )
                 Spacer(modifier = Modifier.height(18.dp))
 
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color(0xFF161B22),
+                    unfocusedContainerColor = Color(0xFF161B22),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color(0xFF30363D),
+                    focusedLabelColor = Color.LightGray,
+                    unfocusedLabelColor = Color.Gray,
+                    focusedPlaceholderColor = Color.Gray,
+                    unfocusedPlaceholderColor = Color.Gray
+                )
+
                 OutlinedTextField(
                     value = owner,
                     onValueChange = { owner = it.trim() },
                     label = { Text("Repository Owner (Login)") },
                     placeholder = { Text("e.g. octocat") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().testTag("add_vault_owner_input")
                 )
 
@@ -1846,6 +1860,7 @@ fun AddRepoDialog(
                     label = { Text("Repository Name") },
                     placeholder = { Text("e.g. dsa-notes") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().testTag("add_vault_repo_input")
                 )
 
@@ -1857,6 +1872,7 @@ fun AddRepoDialog(
                     label = { Text("Local Alias (Display Name)") },
                     placeholder = { Text("e.g. Data Structures Notes") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().testTag("add_vault_display_input")
                 )
 
@@ -1910,10 +1926,23 @@ fun RenameRepoDialog(
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("Locally Rename Alias", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(12.dp))
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color(0xFF161B22),
+                    unfocusedContainerColor = Color(0xFF161B22),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color(0xFF30363D),
+                    focusedLabelColor = Color.LightGray,
+                    unfocusedLabelColor = Color.Gray,
+                    focusedPlaceholderColor = Color.Gray,
+                    unfocusedPlaceholderColor = Color.Gray
+                )
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().testTag("rename_vault_display_input")
                 )
                 Spacer(modifier = Modifier.height(20.dp))
@@ -1950,11 +1979,24 @@ fun PatConfigDialog(
                     fontSize = 11.sp
                 )
                 Spacer(modifier = Modifier.height(14.dp))
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color(0xFF161B22),
+                    unfocusedContainerColor = Color(0xFF161B22),
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color(0xFF30363D),
+                    focusedLabelColor = Color.LightGray,
+                    unfocusedLabelColor = Color.Gray,
+                    focusedPlaceholderColor = Color.Gray,
+                    unfocusedPlaceholderColor = Color.Gray
+                )
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it.trim() },
                     placeholder = { Text("Paste Personal Access Token (PAT)") },
                     singleLine = true,
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth().testTag("vault_pat_input")
                 )
                 Spacer(modifier = Modifier.height(20.dp))

@@ -323,15 +323,31 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    val textFieldColors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+
+                    var errorMsg by remember { mutableStateOf("") }
+
                     OutlinedTextField(
                         value = githubInput,
-                        onValueChange = { githubInput = it },
+                        onValueChange = { 
+                            githubInput = it
+                            if (it.isNotBlank()) errorMsg = ""
+                        },
                         label = { Text("GitHub username") },
+                        placeholder = { Text("e.g. octocat") },
                         leadingIcon = { Icon(Icons.Filled.Source, contentDescription = "GitHub") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("github_input"),
-                        singleLine = true
+                        singleLine = true,
+                        colors = textFieldColors
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -339,13 +355,20 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = leetcodeInput,
                         onValueChange = { leetcodeInput = it },
-                        label = { Text("LeetCode username") },
+                        label = { Text("LeetCode username (Optional)") },
+                        placeholder = { Text("e.g. leetcode_user") },
                         leadingIcon = { Icon(Icons.Filled.Code, contentDescription = "LeetCode") },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("leetcode_input"),
-                        singleLine = true
+                        singleLine = true,
+                        colors = textFieldColors
                     )
+
+                    if (errorMsg.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = errorMsg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -353,7 +376,11 @@ fun LoginScreen(
                         onClick = {
                             keyboardController?.hide()
                             focusManager.clearFocus()
-                            displayOAuthSim = true
+                            if (githubInput.isBlank()) {
+                                errorMsg = "Please enter a GitHub username to proceed securely."
+                            } else {
+                                displayOAuthSim = true
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -372,9 +399,11 @@ fun LoginScreen(
                         onClick = {
                             keyboardController?.hide()
                             focusManager.clearFocus()
-                            val gh = if (githubInput.isBlank()) "guest_developer" else githubInput
-                            val lc = if (leetcodeInput.isBlank()) "guest_coder" else leetcodeInput
-                            onLoginComplete(gh, lc, true)
+                            if (githubInput.isBlank()) {
+                                errorMsg = "Please enter a GitHub username to explore public profile page."
+                            } else {
+                                onLoginComplete(githubInput, leetcodeInput, true)
+                            }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -382,7 +411,7 @@ fun LoginScreen(
                             .testTag("guest_mode_button"),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Continue as Guest")
+                        Text("Explore Public Profile (No Auth)")
                     }
                 }
             }
@@ -642,10 +671,11 @@ fun DashboardScreen(
         Row(
             modifier = Modifier.fillMaxWidth()
         ) {
+            val isLcLinked = leetcodeUser.isNotBlank()
             DashboardQuickStatItem(
                 title = "LeetCode",
-                value = "$lcTotalSolved Solved",
-                subtitle = "Rank #${lcStats?.ranking ?: "-"}",
+                value = if (isLcLinked) "$lcTotalSolved Solved" else "Not Linked",
+                subtitle = if (isLcLinked) "Rank #${lcStats?.ranking ?: "-"}" else "Optional Tracker",
                 icon = Icons.Filled.Code,
                 modifier = Modifier
                     .weight(1f)
@@ -670,10 +700,11 @@ fun DashboardScreen(
         Row(
             modifier = Modifier.fillMaxWidth()
         ) {
+            val isLcLinked = leetcodeUser.isNotBlank()
             DashboardQuickStatItem(
                 title = "Streaks",
-                value = "$lcStreak Days",
-                subtitle = "Longest: ${lcStats?.longestStreak ?: 0}d",
+                value = if (isLcLinked) "$lcStreak Days" else "-",
+                subtitle = if (isLcLinked) "Longest: ${lcStats?.longestStreak ?: 0}d" else "Connect LeetCode",
                 icon = Icons.Filled.LocalFireDepartment,
                 modifier = Modifier
                     .weight(1f)
@@ -941,6 +972,48 @@ fun LeetCodeScreen(
     onRefresh: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+
+    if (username.isBlank()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Code,
+                        contentDescription = "LeetCode Integration",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "LeetCode Sync is Optional",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Connect your LeetCode username profile under the Profile Settings or during sign-in to track real-time consistency metrics, problem-solving progress, and more.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+        return
+    }
 
     if (stats == null) {
         Box(
