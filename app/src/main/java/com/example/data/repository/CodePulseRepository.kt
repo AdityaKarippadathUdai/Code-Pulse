@@ -1234,31 +1234,62 @@ class CodePulseRepository(
     }
 
     suspend fun syncVaultFileContent(fileEntity: VaultFileEntity, token: String? = null) = withContext(Dispatchers.IO) {
-        val authHeader = if (!token.isNullOrBlank()) "token $token" else null
-        val url = fileEntity.downloadUrl ?: return@withContext
+        val authHeader = if (!token.isNullOrBlank()) {
+            if (token.startsWith("token ") || token.startsWith("Bearer ")) token else "token $token"
+        } else null
+        val url = fileEntity.downloadUrl
         try {
-            val request = okhttp3.Request.Builder()
-                .url(url)
-                .apply {
-                    if (authHeader != null) {
-                        addHeader("Authorization", authHeader)
-                    }
-                }
-                .build()
-
-            val localClient = OkHttpClient.Builder()
-                .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.NONE })
-                .build()
-
-            localClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) {
-                    val codeContent = response.body?.string() ?: ""
-                    val updatedFile = fileEntity.copy(codeContent = codeContent)
-                    vaultFileDao.insertFiles(listOf(updatedFile))
+            var codeContent: String? = null
+            
+            // 1. Try to download via GitHub API Contents Endpoint with raw format header
+            val repoId = fileEntity.repoId
+            val existingRepo = vaultRepositoryDao.getRepository(repoId)
+            if (existingRepo != null) {
+                try {
+                    val fallbackResponse = githubService.downloadRawFile(
+                        url = "https://api.github.com/repos/${existingRepo.owner}/${existingRepo.repo}/contents/${fileEntity.path}",
+                        authHeader = authHeader
+                    )
+                    codeContent = fallbackResponse.string()
+                    Log.d("CodePulseRepository", "Successfully fetched file content via GitHub Content API: ${fileEntity.path}")
+                } catch (e: Exception) {
+                    Log.e("CodePulseRepository", "GitHub Contents API failed for ${fileEntity.path}, falling back to downloadUrl: ${e.message}")
                 }
             }
+
+            // 2. Fallback to raw download URL
+            if (codeContent == null && url != null) {
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .apply {
+                        if (authHeader != null) {
+                            addHeader("Authorization", authHeader)
+                        }
+                    }
+                    .build()
+
+                val localClient = OkHttpClient.Builder()
+                    .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.NONE })
+                    .build()
+
+                localClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        codeContent = response.body?.string() ?: ""
+                        Log.d("CodePulseRepository", "Successfully fetched file content via raw downloadUrl: ${fileEntity.path}")
+                    } else {
+                        Log.e("CodePulseRepository", "Raw download URL returned status code: ${response.code}")
+                    }
+                }
+            }
+
+            if (codeContent != null) {
+                val updatedFile = fileEntity.copy(codeContent = codeContent)
+                vaultFileDao.insertFiles(listOf(updatedFile))
+            } else {
+                Log.e("CodePulseRepository", "Failed to retrieve any content for file: ${fileEntity.path}")
+            }
         } catch (e: Exception) {
-            Log.e("CodePulseRepository", "Error downloading vault file file content: ${e.message}")
+            Log.e("CodePulseRepository", "Error downloading vault file content: ${e.message}", e)
         }
     }
 }

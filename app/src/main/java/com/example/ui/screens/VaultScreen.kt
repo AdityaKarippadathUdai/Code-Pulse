@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -258,10 +259,7 @@ fun VaultScreen(
                         file = activeCodeFile,
                         token = personalAccessToken.ifBlank { null },
                         onCacheClicked = {
-                            coroutineScope.launch {
-                                repository.syncVaultFileContent(activeCodeFile, personalAccessToken.ifBlank { null })
-                                Toast.makeText(context, "Caching complete", Toast.LENGTH_SHORT).show()
-                            }
+                            repository.syncVaultFileContent(activeCodeFile, personalAccessToken.ifBlank { null })
                         },
                         onSaveToStudyLibraryClicked = {
                             fileToSaveToStudy = activeCodeFile
@@ -1582,7 +1580,7 @@ fun highlightCode(code: String, extension: String): androidx.compose.ui.text.Ann
 fun VaultFilePreviewer(
     file: VaultFileEntity,
     token: String?,
-    onCacheClicked: () -> Unit,
+    onCacheClicked: suspend () -> Unit,
     onSaveToStudyLibraryClicked: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1591,6 +1589,21 @@ fun VaultFilePreviewer(
 
     var readerTextSize by remember { mutableStateOf(14.sp) }
     var selectSerifFont by remember { mutableStateOf(false) }
+
+    var isDownloading by remember(file.id) { mutableStateOf(false) }
+
+    LaunchedEffect(file.id) {
+        if (codeContent == null) {
+            isDownloading = true
+            try {
+                onCacheClicked()
+            } catch (e: Exception) {
+                Log.e("VaultFilePreviewer", "Auto-download content failed for ${file.name}", e)
+            } finally {
+                isDownloading = false
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -1665,8 +1678,21 @@ fun VaultFilePreviewer(
                         }
                     }
 
+                    val actionScope = rememberCoroutineScope()
                     Button(
-                        onClick = onCacheClicked,
+                        onClick = {
+                            actionScope.launch {
+                                isDownloading = true
+                                try {
+                                    onCacheClicked()
+                                    Toast.makeText(context, "Caching complete", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Connection failed", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    isDownloading = false
+                                }
+                            }
+                        },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (codeContent != null) Color(0xFF21262D) else MaterialTheme.colorScheme.primary
                         ),
@@ -1690,32 +1716,74 @@ fun VaultFilePreviewer(
         HorizontalDivider(color = Color(0xFF30363D))
 
         if (codeContent == null) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.CloudOff,
-                    contentDescription = "Uncached File",
-                    tint = Color.Gray.copy(alpha = 0.5f),
-                    modifier = Modifier.size(72.dp)
-                )
-                Spacer(modifier = Modifier.height(18.dp))
-                Text("Content not cached offline", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "To read documents and code lists fully offline, you can retrieve the file text directly using your token.",
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = onCacheClicked) {
-                    Text("Download Content Cache")
+            val localScope = rememberCoroutineScope()
+            if (isDownloading) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "Loading live codebase...",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Fetching actual content of \"${file.name}\" from GitHub",
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CloudOff,
+                        contentDescription = "Uncached File",
+                        tint = Color.Gray.copy(alpha = 0.5f),
+                        modifier = Modifier.size(72.dp)
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Text("Content not cached offline", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "This file's content couldn't be loaded automatically. Please ensure you have configured a valid GitHub personal access token (PAT), or reload containing actual repository folders.",
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(onClick = {
+                        localScope.launch {
+                            isDownloading = true
+                            try {
+                                onCacheClicked()
+                            } catch (e: Exception) {
+                                Log.e("VaultFilePreviewer", "Manual download failed", e)
+                            } finally {
+                                isDownloading = false
+                            }
+                        }
+                    }) {
+                        Text("Retry Connection Stream")
+                    }
                 }
             }
         } else {
