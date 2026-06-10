@@ -2,6 +2,7 @@ package com.example.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.Fts3
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
@@ -353,5 +354,41 @@ data class VaultFileEntity(
         codeContent = codeContent
     )
 }
+
+@Entity(tableName = "study_items")
+data class StudyItem(
+    @PrimaryKey val id: String, // unique repository/file unique path id
+    val title: String,
+    val sourceRepository: String,
+    val filePath: String,
+    val tags: String = "",
+    val notes: String = "",
+    val savedDate: Long = System.currentTimeMillis(),
+    val category: String, // "DSA", "System Design", "Databases", "Operating Systems", "Networking", "Machine Learning", "Interview Prep", "Personal Notes", "Research"
+    val fileContent: String? = null,
+    val extension: String = "",
+    val size: Long = 0L,
+    val isFavorite: Boolean = false,
+    val highlightsJson: String = "[]", // JSON array of highlighted texts or objects
+    val viewCount: Int = 0,
+    val lastViewedDate: Long = 0L,
+    val isBookmarked: Boolean = true
+)
+
+@Fts3
+@Entity(tableName = "study_items_fts")
+data class StudyItemFts(
+    val docId: String,
+    val title: String,
+    val notes: String,
+    val tags: String,
+    val fileContent: String
+)
+
+data class CategoryCount(
+    val category: String,
+    val count: Int
+)
+
 
 

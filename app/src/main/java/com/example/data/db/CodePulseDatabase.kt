@@ -272,6 +272,48 @@ interface VaultFileDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface StudyLibraryDao {
+    @Query("SELECT * FROM study_items ORDER BY savedDate DESC")
+    fun getAllStudyItemsFlow(): Flow<List<StudyItem>>
+
+    @Query("SELECT * FROM study_items WHERE category = :category ORDER BY savedDate DESC")
+    fun getStudyItemsByCategoryFlow(category: String): Flow<List<StudyItem>>
+
+    @Query("SELECT * FROM study_items WHERE isFavorite = 1 ORDER BY savedDate DESC")
+    fun getFavoriteStudyItemsFlow(): Flow<List<StudyItem>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertStudyItem(item: StudyItem)
+
+    @Update
+    suspend fun updateStudyItem(item: StudyItem)
+
+    @Delete
+    suspend fun deleteStudyItem(item: StudyItem)
+
+    @Query("SELECT * FROM study_items WHERE id = :id LIMIT 1")
+    suspend fun getStudyItemById(id: String): StudyItem?
+
+    @Query("SELECT COUNT(*) FROM study_items")
+    fun getTotalSavedCountFlow(): Flow<Int>
+
+    @Query("SELECT category, COUNT(*) as count FROM study_items GROUP BY category ORDER BY count DESC")
+    fun getCategoryCountsFlow(): Flow<List<CategoryCount>>
+
+    @Query("""
+        SELECT * FROM study_items 
+        WHERE title LIKE '%' || :query || '%' 
+           OR notes LIKE '%' || :query || '%' 
+           OR tags LIKE '%' || :query || '%' 
+           OR fileContent LIKE '%' || :query || '%'
+    """)
+    fun searchStudyItemsFallback(query: String): Flow<List<StudyItem>>
+
+    @Query("DELETE FROM study_items")
+    suspend fun clearAll()
+}
+
 @Database(
     entities = [
         LeetCodeStatsEntity::class,
@@ -288,9 +330,10 @@ interface VaultFileDao {
         RecentlyViewedEntity::class,
         FavoriteEntity::class,
         VaultRepositoryEntity::class,
-        VaultFileEntity::class
+        VaultFileEntity::class,
+        StudyItem::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class CodePulseDatabase : RoomDatabase() {
@@ -309,6 +352,7 @@ abstract class CodePulseDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun vaultRepositoryDao(): VaultRepositoryDao
     abstract fun vaultFileDao(): VaultFileDao
+    abstract fun studyLibraryDao(): StudyLibraryDao
 
 
     companion object {

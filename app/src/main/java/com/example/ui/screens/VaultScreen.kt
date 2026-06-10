@@ -35,6 +35,8 @@ import com.example.data.model.VaultFileEntity
 import com.example.data.model.VaultRepositoryEntity
 import com.example.data.pref.CodePulsePrefs
 import com.example.data.repository.CodePulseRepository
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontStyle
@@ -57,6 +59,9 @@ fun VaultScreen(
     var selectedRepoId by remember { mutableStateOf<Int?>(null) }
     var currentFolderPath by remember { mutableStateOf("") } // e.g. "" or "Trees" or "Trees/BST"
     var selectedFileId by remember { mutableStateOf<String?>(null) } // target file pathID
+    var fileToSaveToStudy by remember { mutableStateOf<VaultFileEntity?>(null) }
+    var activeStudyItem by remember { mutableStateOf<com.example.data.model.StudyItem?>(null) }
+    var activeDashboardTab by remember { mutableStateOf(0) } // 0: Study Hub, 1: Repositories
 
     // Dialogs
     var showAddRepoDialog by remember { mutableStateOf(false) }
@@ -91,7 +96,9 @@ fun VaultScreen(
 
     // Navigation back handlers
     val handleBackNavigation = {
-        if (selectedFileId != null) {
+        if (activeStudyItem != null) {
+            activeStudyItem = null
+        } else if (selectedFileId != null) {
             selectedFileId = null
         } else if (currentFolderPath.isNotEmpty()) {
             if (currentFolderPath.contains('/')) {
@@ -104,6 +111,10 @@ fun VaultScreen(
         }
     }
 
+    BackHandler(enabled = activeStudyItem != null || selectedFileId != null || currentFolderPath.isNotEmpty() || selectedRepoId != null) {
+        handleBackNavigation()
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -112,22 +123,69 @@ fun VaultScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             VaultHeader(
-                activeRepoName = activeRepo?.displayName ?: "Knowledge Vault",
-                activeRepoPath = activeRepo?.let { "${it.owner}/${it.repo}" },
-                currentFolderPath = currentFolderPath,
-                activeFileName = activeCodeFile?.name,
+                activeRepoName = if (activeStudyItem != null) "Personal Study" else (activeRepo?.displayName ?: "Knowledge Vault"),
+                activeRepoPath = if (activeStudyItem != null) null else (activeRepo?.let { "${it.owner}/${it.repo}" }),
+                currentFolderPath = if (activeStudyItem != null) "" else currentFolderPath,
+                activeFileName = if (activeStudyItem != null) activeStudyItem!!.title else activeCodeFile?.name,
                 onBackClicked = { handleBackNavigation() },
-                showBackButton = selectedRepoId != null,
+                showBackButton = selectedRepoId != null || activeStudyItem != null,
                 onConfigPatClicked = { showPatConfigDialog = true }
             )
 
             HorizontalDivider(color = Color(0xFF30363D))
 
             // Body
-            Box(modifier = Modifier.weight(1f)) {
+            if (activeStudyItem != null) {
+                Box(modifier = Modifier.weight(1f)) {
+                    StudyItemReader(
+                        item = activeStudyItem!!,
+                        repository = repository,
+                        onBack = { activeStudyItem = null }
+                    )
+                }
+            } else {
+
                 if (selectedRepoId == null) {
-                    // 1. Dashboard connected list
-                    VaultDashboard(
+                    TabRow(
+                        selectedTabIndex = activeDashboardTab,
+                        containerColor = Color(0xFF161B22),
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        indicator = { tabPositions ->
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier.tabIndicatorOffset(tabPositions[activeDashboardTab]),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    ) {
+                        Tab(
+                            selected = activeDashboardTab == 0,
+                            onClick = { activeDashboardTab = 0 },
+                            text = { Text("Study Library", fontSize = 13.sp, fontWeight = FontWeight.Bold) },
+                            icon = { Icon(Icons.Filled.School, null, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.testTag("study_library_tab")
+                        )
+                        Tab(
+                            selected = activeDashboardTab == 1,
+                            onClick = { activeDashboardTab = 1 },
+                            text = { Text("Repositories", fontSize = 13.sp, fontWeight = FontWeight.Bold) },
+                            icon = { Icon(Icons.Filled.FolderCopy, null, modifier = Modifier.size(16.dp)) },
+                            modifier = Modifier.testTag("vault_repositories_tab")
+                        )
+                    }
+
+                    HorizontalDivider(color = Color(0xFF30363D))
+                }
+
+                Box(modifier = Modifier.weight(1f)) {
+                    if (selectedRepoId == null) {
+                        if (activeDashboardTab == 0) {
+                            StudyLibraryHub(
+                                repository = repository,
+                                onOpenItem = { activeStudyItem = it }
+                            )
+                        } else {
+                            // 1. Dashboard connected list
+                            VaultDashboard(
                         repositories = repositories,
                         onRepoClick = { repoId ->
                             selectedRepoId = repoId
@@ -193,7 +251,8 @@ fun VaultScreen(
                             }
                         }
                     )
-                } else if (activeCodeFile != null) {
+                }
+            } else if (activeCodeFile != null) {
                     // 2. Multi-format Document and Code Previewer
                     VaultFilePreviewer(
                         file = activeCodeFile,
@@ -203,6 +262,9 @@ fun VaultScreen(
                                 repository.syncVaultFileContent(activeCodeFile, personalAccessToken.ifBlank { null })
                                 Toast.makeText(context, "Caching complete", Toast.LENGTH_SHORT).show()
                             }
+                        },
+                        onSaveToStudyLibraryClicked = {
+                            fileToSaveToStudy = activeCodeFile
                         }
                     )
                 } else {
@@ -224,10 +286,11 @@ fun VaultScreen(
                     )
                 }
             }
+            }
         }
 
         // Floating Action Button on main vault page
-        if (selectedRepoId == null) {
+        if (selectedRepoId == null && activeStudyItem == null && activeDashboardTab == 1) {
             FloatingActionButton(
                 onClick = { showAddRepoDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary,
@@ -299,6 +362,39 @@ fun VaultScreen(
                         prefs.setGithubToken(token)
                         showPatConfigDialog = false
                         Toast.makeText(context, "Credentials stored locally", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }
+
+        if (fileToSaveToStudy != null) {
+            SaveToStudyLibraryDialog(
+                file = fileToSaveToStudy!!,
+                repoName = activeRepo?.displayName ?: "Unknown Repository",
+                onDismiss = { fileToSaveToStudy = null },
+                onConfirm = { title, category, tags, notes ->
+                    coroutineScope.launch {
+                        val studyItem = com.example.data.model.StudyItem(
+                            id = "study_${fileToSaveToStudy!!.repoId}_${fileToSaveToStudy!!.path.hashCode()}",
+                            title = title,
+                            sourceRepository = activeRepo?.displayName ?: "Repository",
+                            filePath = fileToSaveToStudy!!.path,
+                            tags = tags,
+                            notes = notes,
+                            savedDate = System.currentTimeMillis(),
+                            category = category,
+                            fileContent = fileToSaveToStudy!!.codeContent ?: "",
+                            extension = fileToSaveToStudy!!.extension,
+                            size = fileToSaveToStudy!!.size,
+                            isFavorite = false,
+                            highlightsJson = "",
+                            viewCount = 0,
+                            lastViewedDate = 0L,
+                            isBookmarked = true
+                        )
+                        repository.saveStudyItem(studyItem)
+                        Toast.makeText(context, "Saved to Personal Study Library!", Toast.LENGTH_LONG).show()
+                        fileToSaveToStudy = null
                     }
                 }
             )
@@ -1486,7 +1582,8 @@ fun highlightCode(code: String, extension: String): androidx.compose.ui.text.Ann
 fun VaultFilePreviewer(
     file: VaultFileEntity,
     token: String?,
-    onCacheClicked: () -> Unit
+    onCacheClicked: () -> Unit,
+    onSaveToStudyLibraryClicked: () -> Unit
 ) {
     val context = LocalContext.current
     val codeContent = file.codeContent
@@ -1522,6 +1619,17 @@ fun VaultFilePreviewer(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onSaveToStudyLibraryClicked,
+                        modifier = Modifier.testTag("save_to_study_icon")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CollectionsBookmark,
+                            contentDescription = "Save to Study Library",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     if (codeContent != null && (extension == "txt" || extension == "md" || extension == "docx")) {
                         IconButton(onClick = {
                             readerTextSize = when (readerTextSize) {
@@ -1909,4 +2017,178 @@ fun formatEpoch(epoch: Long): String {
     } catch (e: Exception) {
         "N/A"
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SaveToStudyLibraryDialog(
+    file: VaultFileEntity,
+    repoName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, category: String, tags: String, notes: String) -> Unit
+) {
+    var title by remember { mutableStateOf(file.fileName) }
+    var category by remember { mutableStateOf("DSA") }
+    var tags by remember { mutableStateOf("") }
+    var notes by remember { mutableStateOf("") }
+    var showCategoryDropdown by remember { mutableStateOf(false) }
+
+    val categories = listOf(
+        "DSA", "System Design", "Databases", "Operating Systems",
+        "Networking", "Machine Learning", "Interview Prep", "Personal Notes", "Research"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Save to Study Library",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Convert and cache this file permanently into your Offline Personal Library.",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+
+                // Title Input
+                Column {
+                    Text("Title", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        modifier = Modifier.fillMaxWidth().testTag("add_study_title"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color(0xFF161B22),
+                            unfocusedContainerColor = Color(0xFF161B22),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color(0xFF30363D)
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                // Category dropdown selector
+                Column {
+                    Text("Category", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, Color(0xFF30363D), RoundedCornerShape(6.dp))
+                            .background(Color(0xFF161B22))
+                            .clickable { showCategoryDropdown = !showCategoryDropdown }
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(category, color = Color.White, fontSize = 14.sp)
+                            Icon(Icons.Filled.ArrowDropDown, null, tint = Color.Gray)
+                        }
+                    }
+
+                    if (showCategoryDropdown) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .padding(top = 4.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                            border = BorderStroke(1.dp, Color(0xFF30363D))
+                        ) {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                categories.forEach { cat ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                category = cat
+                                                showCategoryDropdown = false
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(cat, color = Color.White, fontSize = 13.sp)
+                                    }
+                                    HorizontalDivider(color = Color(0xFF30363D).copy(alpha = 0.5f))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Tags Input
+                Column {
+                    Text("Tags", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = tags,
+                        onValueChange = { tags = it },
+                        placeholder = { Text("e.g. tree, sorting, database", color = Color.Gray, fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth().testTag("add_study_tags"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color(0xFF161B22),
+                            unfocusedContainerColor = Color(0xFF161B22),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color(0xFF30363D)
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                // Notes Input
+                Column {
+                    Text("Personal Notes", color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        placeholder = { Text("Add study summaries, core questions, or annotations...", color = Color.Gray, fontSize = 13.sp) },
+                        modifier = Modifier.fillMaxWidth().height(100.dp).testTag("add_study_notes"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedContainerColor = Color(0xFF161B22),
+                            unfocusedContainerColor = Color(0xFF161B22),
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = Color(0xFF30363D)
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(title.ifBlank { file.fileName }, category, tags, notes) },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Confirm & Save", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        },
+        containerColor = Color(0xFF161B22)
+    )
 }

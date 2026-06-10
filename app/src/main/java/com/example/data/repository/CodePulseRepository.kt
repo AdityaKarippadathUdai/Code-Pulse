@@ -68,6 +68,7 @@ class CodePulseRepository(
     private val favoriteDao = database.favoriteDao()
     private val vaultRepositoryDao = database.vaultRepositoryDao()
     private val vaultFileDao = database.vaultFileDao()
+    private val studyLibraryDao = database.studyLibraryDao()
 
     // Flows
     fun getLeetCodeStatsFlow(username: String): Flow<LeetCodeStatsEntity?> = leetCodeStatsDao.getStatsFlow(username)
@@ -82,6 +83,34 @@ class CodePulseRepository(
     fun getVaultRepositoryFlow(id: Int): Flow<VaultRepositoryEntity?> = vaultRepositoryDao.getRepositoryFlow(id)
     fun getVaultFilesFlow(repoId: Int): Flow<List<VaultFileEntity>> = vaultFileDao.getFilesForRepoFlow(repoId)
     fun getVaultFilesByParentFolder(repoId: Int, parentPath: String): Flow<List<VaultFileEntity>> = vaultFileDao.getFilesByParentFolder(repoId, parentPath)
+
+    // Study Library Flows & CRUD
+    fun getAllStudyItemsFlow(): Flow<List<StudyItem>> = studyLibraryDao.getAllStudyItemsFlow()
+    fun getStudyItemsByCategoryFlow(category: String): Flow<List<StudyItem>> = studyLibraryDao.getStudyItemsByCategoryFlow(category)
+    fun getFavoriteStudyItemsFlow(): Flow<List<StudyItem>> = studyLibraryDao.getFavoriteStudyItemsFlow()
+    fun getTotalSavedCountFlow(): Flow<Int> = studyLibraryDao.getTotalSavedCountFlow()
+    fun getCategoryCountsFlow(): Flow<List<CategoryCount>> = studyLibraryDao.getCategoryCountsFlow()
+
+    suspend fun getStudyItemById(id: String): StudyItem? = withContext(Dispatchers.IO) {
+        studyLibraryDao.getStudyItemById(id)
+    }
+
+    suspend fun saveStudyItem(item: StudyItem) = withContext(Dispatchers.IO) {
+        studyLibraryDao.insertStudyItem(item)
+    }
+
+    suspend fun updateStudyItem(item: StudyItem) = withContext(Dispatchers.IO) {
+        studyLibraryDao.insertStudyItem(item)
+    }
+
+    suspend fun deleteStudyItem(item: StudyItem) = withContext(Dispatchers.IO) {
+        studyLibraryDao.deleteStudyItem(item)
+    }
+
+    fun searchStudyItems(query: String): Flow<List<StudyItem>> {
+        if (query.isBlank()) return studyLibraryDao.getAllStudyItemsFlow()
+        return studyLibraryDao.searchStudyItemsFallback(query)
+    }
 
     suspend fun insertGoal(goal: GoalEntity) = withContext(Dispatchers.IO) {
         goalDao.insertGoal(goal)
