@@ -218,6 +218,60 @@ interface FavoriteDao {
     suspend fun clearAll()
 }
 
+@Dao
+interface VaultRepositoryDao {
+    @Query("SELECT * FROM vault_repositories ORDER BY isFavorite DESC, orderIndex ASC, id DESC")
+    fun getAllRepositoriesFlow(): Flow<List<VaultRepositoryEntity>>
+
+    @Query("SELECT * FROM vault_repositories WHERE id = :id LIMIT 1")
+    fun getRepositoryFlow(id: Int): Flow<VaultRepositoryEntity?>
+
+    @Query("SELECT * FROM vault_repositories WHERE id = :id LIMIT 1")
+    suspend fun getRepository(id: Int): VaultRepositoryEntity?
+
+    @Query("SELECT * FROM vault_repositories WHERE owner = :owner AND repo = :repo LIMIT 1")
+    suspend fun getRepositoryByPath(owner: String, repo: String): VaultRepositoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRepository(repo: VaultRepositoryEntity): Long
+
+    @Update
+    suspend fun updateRepository(repo: VaultRepositoryEntity)
+
+    @Update
+    suspend fun updateRepositories(repos: List<VaultRepositoryEntity>)
+
+    @Delete
+    suspend fun deleteRepository(repo: VaultRepositoryEntity)
+
+    @Query("DELETE FROM vault_repositories")
+    suspend fun clearAll()
+}
+
+@Dao
+interface VaultFileDao {
+    @Query("SELECT * FROM vault_files WHERE repoId = :repoId ORDER BY type ASC, name ASC")
+    fun getFilesForRepoFlow(repoId: Int): Flow<List<VaultFileEntity>>
+
+    @Query("SELECT * FROM vault_files WHERE repoId = :repoId AND path = :path LIMIT 1")
+    suspend fun getFileByPath(repoId: Int, path: String): VaultFileEntity?
+
+    @Query("SELECT * FROM vault_files WHERE pathId = :pathId LIMIT 1")
+    suspend fun getFileByPathId(pathId: String): VaultFileEntity?
+
+    @Query("SELECT * FROM vault_files WHERE repoId = :repoId AND parentPath = :parentPath ORDER BY type ASC, name ASC")
+    fun getFilesByParentFolder(repoId: Int, parentPath: String): Flow<List<VaultFileEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFiles(files: List<VaultFileEntity>)
+
+    @Query("DELETE FROM vault_files WHERE repoId = :repoId")
+    suspend fun deleteFilesForRepo(repoId: Int)
+
+    @Query("DELETE FROM vault_files")
+    suspend fun clearAll()
+}
+
 @Database(
     entities = [
         LeetCodeStatsEntity::class,
@@ -232,9 +286,11 @@ interface FavoriteDao {
         ProblemEntity::class,
         RepositoryInfoEntity::class,
         RecentlyViewedEntity::class,
-        FavoriteEntity::class
+        FavoriteEntity::class,
+        VaultRepositoryEntity::class,
+        VaultFileEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class CodePulseDatabase : RoomDatabase() {
@@ -251,6 +307,8 @@ abstract class CodePulseDatabase : RoomDatabase() {
     abstract fun repositoryInfoDao(): RepositoryInfoDao
     abstract fun recentlyViewedDao(): RecentlyViewedDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun vaultRepositoryDao(): VaultRepositoryDao
+    abstract fun vaultFileDao(): VaultFileDao
 
 
     companion object {

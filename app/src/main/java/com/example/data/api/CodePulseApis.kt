@@ -37,7 +37,62 @@ interface GitHubService {
         @Path("path") path: String,
         @Header("Authorization") authHeader: String? = null
     ): List<GitHubContentItem>
+
+    @GET("repos/{owner}/{repo}/languages")
+    suspend fun getRepoLanguages(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Header("Authorization") authHeader: String? = null
+    ): Map<String, Long>
+
+    @GET("repos/{owner}/{repo}/commits")
+    suspend fun getRepoCommits(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Query("per_page") perPage: Int = 1,
+        @Header("Authorization") authHeader: String? = null
+    ): List<GitHubCommitResponse>
+
+    @GET("repos/{owner}/{repo}/git/trees/{branch}")
+    suspend fun getRepoTreeRecursive(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("branch") branch: String,
+        @Query("recursive") recursive: Int = 1,
+        @Header("Authorization") authHeader: String? = null
+    ): GitHubTreeResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class GitHubCommitResponse(
+    val commit: GitHubCommitInfo
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubCommitInfo(
+    val committer: GitHubCommitterInfo,
+    val message: String
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubCommitterInfo(
+    val date: String
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubTreeResponse(
+    val tree: List<GitHubTreeEntry>
+)
+
+@JsonClass(generateAdapter = true)
+data class GitHubTreeEntry(
+    val path: String,
+    val mode: String,
+    val type: String, // "blob" (file) or "tree" (dir)
+    val sha: String,
+    val size: Long? = 0L,
+    val url: String? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class GitHubRepoDetailResponse(

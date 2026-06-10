@@ -66,6 +66,8 @@ class CodePulseRepository(
     private val repositoryInfoDao = database.repositoryInfoDao()
     private val recentlyViewedDao = database.recentlyViewedDao()
     private val favoriteDao = database.favoriteDao()
+    private val vaultRepositoryDao = database.vaultRepositoryDao()
+    private val vaultFileDao = database.vaultFileDao()
 
     // Flows
     fun getLeetCodeStatsFlow(username: String): Flow<LeetCodeStatsEntity?> = leetCodeStatsDao.getStatsFlow(username)
@@ -76,6 +78,10 @@ class CodePulseRepository(
     fun getGoalsFlow(): Flow<List<GoalEntity>> = goalDao.getAllGoals()
     fun getAchievementsFlow(): Flow<List<AchievementEntity>> = achievementDao.getAllAchievements()
     fun getCodingHistoryFlow(): Flow<List<CodingHistoryEntity>> = codingHistoryDao.getHistory()
+    fun getAllVaultRepositoriesFlow(): Flow<List<VaultRepositoryEntity>> = vaultRepositoryDao.getAllRepositoriesFlow()
+    fun getVaultRepositoryFlow(id: Int): Flow<VaultRepositoryEntity?> = vaultRepositoryDao.getRepositoryFlow(id)
+    fun getVaultFilesFlow(repoId: Int): Flow<List<VaultFileEntity>> = vaultFileDao.getFilesForRepoFlow(repoId)
+    fun getVaultFilesByParentFolder(repoId: Int, parentPath: String): Flow<List<VaultFileEntity>> = vaultFileDao.getFilesByParentFolder(repoId, parentPath)
 
     suspend fun insertGoal(goal: GoalEntity) = withContext(Dispatchers.IO) {
         goalDao.insertGoal(goal)
@@ -141,6 +147,108 @@ class CodePulseRepository(
             cal.add(Calendar.DAY_OF_YEAR, 1)
         }
         codingHistoryDao.insertHistory(historyList)
+
+        // Prepopulate Vault repositories if empty
+        prepopulateVaultIfNeeded()
+    }
+
+    private suspend fun prepopulateVaultIfNeeded() {
+        val existingVaultRepos = vaultRepositoryDao.getAllRepositoriesFlow().first()
+        if (existingVaultRepos.isEmpty()) {
+            val dsaRepo = VaultRepositoryEntity(
+                id = 1,
+                owner = "octocat",
+                repo = "dsa-notes",
+                displayName = "Data Structures & Algorithms Notes",
+                description = "Comprehensive notes on trees, graphs, sorting, searching, recursion, dynamic programming, and logic puzzles.",
+                isFavorite = true,
+                lastSyncTime = System.currentTimeMillis() - 3600000,
+                totalFiles = 8,
+                folderCount = 3,
+                sizeEstimate = 14500L,
+                topicsJson = "[\"algorithms\", \"data-structures\", \"cs-fundamentals\", \"interview-prep\"]",
+                languagesJson = "{\"Kotlin\":4500,\"Java\":3200,\"Python\":6800}",
+                mostUsedLanguage = "Python",
+                syncStatus = "SUCCESS",
+                lastCommitDate = "2026-06-09",
+                orderIndex = 0
+            )
+
+            val sysDesignRepo = VaultRepositoryEntity(
+                id = 2,
+                owner = "octocat",
+                repo = "system-design",
+                displayName = "System Design Guide",
+                description = "High-level architectural design checklists, horizontal scalability, load balancing, sharding, caching strategies, and CDN networks.",
+                isFavorite = false,
+                lastSyncTime = System.currentTimeMillis() - 7200000,
+                totalFiles = 5,
+                folderCount = 2,
+                sizeEstimate = 8200L,
+                topicsJson = "[\"system-design\", \"architecture\", \"microservices\", \"scalability\"]",
+                languagesJson = "{\"Markdown\":8200}",
+                mostUsedLanguage = "Markdown",
+                syncStatus = "SUCCESS",
+                lastCommitDate = "2026-06-08",
+                orderIndex = 1
+            )
+
+            val researchRepo = VaultRepositoryEntity(
+                id = 3,
+                owner = "octocat",
+                repo = "research-notes",
+                displayName = "AI Research Notes",
+                description = "Curation of technical papers, transformer models, diffusion parameters, vector database indexing, and fine-tuning guides.",
+                isFavorite = false,
+                lastSyncTime = System.currentTimeMillis() - 10800000,
+                totalFiles = 4,
+                folderCount = 1,
+                sizeEstimate = 12000L,
+                topicsJson = "[\"ai\", \"machine-learning\", \"transformers\", \"research\"]",
+                languagesJson = "{\"Python\":9500,\"Markdown\":2500}",
+                mostUsedLanguage = "Python",
+                syncStatus = "SUCCESS",
+                lastCommitDate = "2026-06-05",
+                orderIndex = 2
+            )
+
+            vaultRepositoryDao.insertRepository(dsaRepo)
+            vaultRepositoryDao.insertRepository(sysDesignRepo)
+            vaultRepositoryDao.insertRepository(researchRepo)
+
+            // Seed Files for DSA Notes
+            val dsaFiles = listOf(
+                VaultFileEntity("1_", 1, "Trees", "Trees", "", "dir"),
+                VaultFileEntity("1_Trees", 1, "BinarySearchTree.kt", "Trees/BinarySearchTree.kt", "Trees", "file", 920L, "Trees/BinarySearchTree.kt", "class BSTNode(val value: Int) {\n    var left: BSTNode? = null\n    var right: BSTNode? = null\n}"),
+                VaultFileEntity("1_Trees_LCA", 1, "LowestCommonAncestor.java", "Trees/LowestCommonAncestor.java", "Trees", "file", 850L, "Trees/LowestCommonAncestor.java", "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n    if (root == null || root == p || root == q) return root;\n    TreeNode left = lowestCommonAncestor(root.left, p, q);\n    TreeNode right = lowestCommonAncestor(root.right, p, q);\n    return left == null ? right : (right == null ? left : root);\n}"),
+                VaultFileEntity("1_Graphs", 1, "Graphs", "Graphs", "", "dir"),
+                VaultFileEntity("1_Graphs_DFS", 1, "DepthFirstSearch.py", "Graphs/DepthFirstSearch.py", "Graphs", "file", 1200L, "Graphs/DepthFirstSearch.py", "def dfs(graph, start, visited=None):\n    if visited is None:\n        visited = set()\n    visited.add(start)\n    print(start)\n    for next in graph[start] - visited:\n        dfs(graph, next, visited)\n    return visited"),
+                VaultFileEntity("1_Graphs_Dijkstra", 1, "DijkstraShortestPath.go", "Graphs/DijkstraShortestPath.go", "Graphs", "file", 2500L, "Graphs/DijkstraShortestPath.go", "package main\n// Dijkstra's SSP algorithm for weighted graphs\nfunc Dijkstra(graph [][]Edge, source int) []int {\n    // Implementation details\n}"),
+                VaultFileEntity("1_Sorting", 1, "Sorting", "Sorting", "", "dir"),
+                VaultFileEntity("1_Sorting_Quick", 1, "QuickSort.py", "Sorting/QuickSort.py", "Sorting", "file", 610L, "Sorting/QuickSort.py", "def quicksort(arr):\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)"),
+                VaultFileEntity("1_Sorting_Merge", 1, "MergeSort.kt", "Sorting/MergeSort.kt", "Sorting", "file", 1800L, "Sorting/MergeSort.kt", "fun mergeSort(list: List<Int>): List<Int> {\n    if (list.size <= 1) return list\n    val middle = list.size / 2\n    val left = list.subList(0, middle)\n    val right = list.subList(middle, list.size)\n    return merge(mergeSort(left), mergeSort(right))\n}")
+            )
+
+            // Seed Files for System Design Guide
+            val sysDesignFiles = listOf(
+                VaultFileEntity("2_Architecture", 2, "Architecture", "Architecture", "", "dir"),
+                VaultFileEntity("2_Arch_Micro", 2, "MicroservicesOverview.md", "Architecture/MicroservicesOverview.md", "Architecture", "file", 4500L, "Architecture/MicroservicesOverview.md", "# Microservices Architecture\n\n*   **Decoupled Services**: Services are constructed independently based on domains.\n*   **API Gateway**: Unified edge routing with rate limiters and authentication tokens.\n*   **Service Discovery**: Consensus mapping via Consul or Eureka."),
+                VaultFileEntity("2_Arch_Clean", 2, "CleanArchitecturePatterns.md", "Architecture/CleanArchitecturePatterns.md", "Architecture", "file", 3200L, "Architecture/CleanArchitecturePatterns.md", "# Clean Architecture Principles\n\n*   **Entities**: Enterprise logic rules.\n*   **Use Cases**: Application-specific pathways.\n*   **Adapters**: Presenters, views, and repository databases."),
+                VaultFileEntity("2_Scalability", 2, "Scalability", "Scalability", "", "dir"),
+                VaultFileEntity("2_Scale_Load", 2, "LoadBalancingStrategies.md", "Scalability/LoadBalancingStrategies.md", "Scalability", "file", 2200L, "Scalability/LoadBalancingStrategies.md", "# Load Balancing Strategies\n\n1.  **Round Robin**: Sequentially route requests.\n2.  **Least Connections**: Prioritize servers handling fewer active workflows.\n3.  **IP Hash**: Ensure sticky session integrity.")
+            )
+
+            // Seed Files for ML Research Guide
+            val researchFiles = listOf(
+                VaultFileEntity("3_Models", 3, "Models", "Models", "", "dir"),
+                VaultFileEntity("3_Model_Trans", 3, "TransformerAesthetics.md", "Models/TransformerAesthetics.md", "Models", "file", 5000L, "Models/TransformerAesthetics.md", "# Inside Transformers\n\n*   **Self-Attention**: Computing keys, queries, and values.\n*   **Multi-Head Scaling**: Attending to multi-tier context projections.\n*   **Positional Sinusoids**: Feeding order arrays to invariant neural layers."),
+                VaultFileEntity("3_Model_Diff", 3, "DiffusionParameters.py", "Models/DiffusionParameters.py", "Models", "file", 4200L, "Models/DiffusionParameters.py", "# Gaussian diffusion coefficients scheduler\ndef linear_beta_schedule(timesteps):\n    beta_start = 0.0001\n    beta_end = 0.02\n    return torch.linspace(beta_start, beta_end, timesteps)")
+            )
+
+            vaultFileDao.insertFiles(dsaFiles)
+            vaultFileDao.insertFiles(sysDesignFiles)
+            vaultFileDao.insertFiles(researchFiles)
+        }
     }
 
     private fun cleanLeetcodeUsername(input: String): String {
@@ -981,6 +1089,162 @@ class CodePulseRepository(
             favorite = false,
             codeText = code
         )
+    }
+
+    suspend fun insertVaultRepository(repo: VaultRepositoryEntity): Long = withContext(Dispatchers.IO) {
+        vaultRepositoryDao.insertRepository(repo)
+    }
+
+    suspend fun updateVaultRepository(repo: VaultRepositoryEntity) = withContext(Dispatchers.IO) {
+        vaultRepositoryDao.updateRepository(repo)
+    }
+
+    suspend fun updateVaultRepositories(repos: List<VaultRepositoryEntity>) = withContext(Dispatchers.IO) {
+        vaultRepositoryDao.updateRepositories(repos)
+    }
+
+    suspend fun deleteVaultRepository(repo: VaultRepositoryEntity) = withContext(Dispatchers.IO) {
+        vaultFileDao.deleteFilesForRepo(repo.id)
+        vaultRepositoryDao.deleteRepository(repo)
+    }
+
+    suspend fun syncVaultRepository(repoId: Int, owner: String, repo: String, token: String? = null) = withContext(Dispatchers.IO) {
+        val existingRepo = vaultRepositoryDao.getRepository(repoId) ?: return@withContext
+        vaultRepositoryDao.updateRepository(existingRepo.copy(syncStatus = "SYNCING"))
+
+        try {
+            val authHeader = if (!token.isNullOrBlank()) "token $token" else null
+
+            // 1. Fetch repo metadata
+            val metadata = githubService.getRepoMetadata(owner, repo, authHeader)
+            val branchName = metadata.default_branch ?: "main"
+
+            // 2. Fetch language details
+            var mostUsedLang = "Unknown"
+            var langsJson = "{}"
+            try {
+                val languagesMap = githubService.getRepoLanguages(owner, repo, authHeader)
+                mostUsedLang = languagesMap.maxByOrNull { it.value }?.key ?: "Unknown"
+
+                val langsJsonBuilder = StringBuilder("{")
+                languagesMap.entries.forEachIndexed { idx, entry ->
+                    langsJsonBuilder.append("\"${entry.key}\":${entry.value}")
+                    if (idx < languagesMap.size - 1) langsJsonBuilder.append(",")
+                }
+                langsJsonBuilder.append("}")
+                langsJson = langsJsonBuilder.toString()
+            } catch (e: Exception) {
+                Log.e("CodePulseRepository", "Error loading repo languages: ${e.message}")
+            }
+
+            // 3. Fetch last commit details
+            var latestCommitDate = "N/A"
+            try {
+                val commits = githubService.getRepoCommits(owner, repo, perPage = 1, authHeader = authHeader)
+                if (commits.isNotEmpty()) {
+                    val dateRaw = commits[0].commit.committer.date
+                    latestCommitDate = if (dateRaw.length >= 10) dateRaw.substring(0, 10) else dateRaw
+                }
+            } catch (e: Exception) {
+                Log.e("CodePulseRepository", "Error checking commits: ${e.message}")
+            }
+
+            // 4. Fetch directory trees recursively
+            val treeResponse = githubService.getRepoTreeRecursive(owner, repo, branchName, recursive = 1, authHeader = authHeader)
+            val entries = treeResponse.tree
+
+            val fileEntities = mutableListOf<VaultFileEntity>()
+            var filesCount = 0
+            var foldersCount = 0
+            var totalBytesEstimate = 0L
+
+            for (entry in entries) {
+                val path = entry.path
+                val type = if (entry.type == "blob" || entry.type == "file") "file" else "dir"
+                val name = if (path.contains('/')) path.substringAfterLast('/') else path
+                val parentPath = if (path.contains('/')) path.substringBeforeLast('/') else ""
+
+                if (type == "file") {
+                    filesCount++
+                    totalBytesEstimate += entry.size ?: 0L
+                } else {
+                    foldersCount++
+                }
+
+                val downloadUrl = if (type == "file") {
+                    "https://raw.githubusercontent.com/$owner/$repo/$branchName/$path"
+                } else null
+
+                fileEntities.add(
+                    VaultFileEntity(
+                        pathId = "${repoId}_${path}",
+                        repoId = repoId,
+                        name = name,
+                        path = path,
+                        parentPath = parentPath,
+                        type = type,
+                        size = entry.size ?: 0L,
+                        downloadUrl = downloadUrl,
+                        codeContent = null
+                    )
+                )
+            }
+
+            // Clear first and insert
+            vaultFileDao.deleteFilesForRepo(repoId)
+            vaultFileDao.insertFiles(fileEntities)
+
+            // Update parameters in SQLite DB
+            val updated = existingRepo.copy(
+                description = metadata.description ?: existingRepo.description,
+                displayName = existingRepo.displayName.ifBlank { metadata.name },
+                totalFiles = filesCount,
+                folderCount = foldersCount,
+                sizeEstimate = totalBytesEstimate,
+                mostUsedLanguage = mostUsedLang,
+                languagesJson = langsJson,
+                lastSyncTime = System.currentTimeMillis(),
+                lastCommitDate = latestCommitDate,
+                syncStatus = "SUCCESS",
+                defaultBranch = branchName,
+                isPrivate = metadata.private
+            )
+            vaultRepositoryDao.updateRepository(updated)
+
+        } catch (e: Exception) {
+            Log.e("CodePulseRepository", "Vault Sync Failure: ${e.message}", e)
+            vaultRepositoryDao.updateRepository(existingRepo.copy(syncStatus = "FAILED"))
+            throw e
+        }
+    }
+
+    suspend fun syncVaultFileContent(fileEntity: VaultFileEntity, token: String? = null) = withContext(Dispatchers.IO) {
+        val authHeader = if (!token.isNullOrBlank()) "token $token" else null
+        val url = fileEntity.downloadUrl ?: return@withContext
+        try {
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .apply {
+                    if (authHeader != null) {
+                        addHeader("Authorization", authHeader)
+                    }
+                }
+                .build()
+
+            val localClient = OkHttpClient.Builder()
+                .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.NONE })
+                .build()
+
+            localClient.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val codeContent = response.body?.string() ?: ""
+                    val updatedFile = fileEntity.copy(codeContent = codeContent)
+                    vaultFileDao.insertFiles(listOf(updatedFile))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CodePulseRepository", "Error downloading vault file file content: ${e.message}")
+        }
     }
 }
 

@@ -285,3 +285,39 @@ data class FavoriteEntity(
     val addedAt: Long = System.currentTimeMillis()
 )
 
+@Entity(tableName = "vault_repositories")
+data class VaultRepositoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val owner: String,
+    val repo: String,
+    val displayName: String,
+    val isFavorite: Boolean = false,
+    val lastSyncTime: Long = 0L,
+    val description: String = "",
+    val totalFiles: Int = 0,
+    val folderCount: Int = 0,
+    val sizeEstimate: Long = 0L,
+    val topicsJson: String = "[]", // List of tags (JSON array)
+    val languagesJson: String = "{}", // Map of Lang->Bytes (JSON object)
+    val mostUsedLanguage: String = "Unknown",
+    val syncStatus: String = "IDLE", // IDLE, SYNCING, SUCCESS, FAILED
+    val lastCommitDate: String = "N/A",
+    val orderIndex: Int = 0,
+    val defaultBranch: String = "main",
+    val isPrivate: Boolean = false
+)
+
+@Entity(tableName = "vault_files")
+data class VaultFileEntity(
+    @PrimaryKey val pathId: String, // "repo_id/path/to/file"
+    val repoId: Int,
+    val name: String,
+    val path: String, // e.g. "Folder/Sub/file.kt"
+    val parentPath: String, // e.g. "Folder/Sub"
+    val type: String, // "file" or "dir"
+    val size: Long = 0L,
+    val downloadUrl: String? = null,
+    val codeContent: String? = null // Fully cached content
+)
+
+

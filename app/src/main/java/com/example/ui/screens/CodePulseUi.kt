@@ -130,6 +130,7 @@ fun MainLayout(
                         TabItem("Dashboard", "dashboard", Icons.Filled.Dashboard, Icons.Outlined.Dashboard),
                         TabItem("Stats", "stats", Icons.Filled.BarChart, Icons.Outlined.BarChart),
                         TabItem("Repository", "repository", Icons.Filled.Folder, Icons.Outlined.Folder),
+                        TabItem("Vault", "vault", Icons.Filled.Bookmarks, Icons.Outlined.Bookmarks),
                         TabItem("Profile", "profile", Icons.Filled.Person, Icons.Outlined.Person)
                     )
                     tabs.forEach { tab ->
@@ -196,6 +197,10 @@ fun MainLayout(
                             onShowAddGoal = { showAddGoalDialog = true }
                         )
                         "repository" -> RepositoryScreen(
+                            repository = repository,
+                            prefs = prefs
+                        )
+                        "vault" -> VaultScreen(
                             repository = repository,
                             prefs = prefs
                         )
