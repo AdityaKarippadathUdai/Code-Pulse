@@ -2,6 +2,11 @@ package com.example.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
+import android.content.ClipboardManager
+import android.content.ClipData
+import java.io.File
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -31,6 +36,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -121,10 +128,9 @@ fun MainLayout(
                 ) {
                     val tabs = listOf(
                         TabItem("Dashboard", "dashboard", Icons.Filled.Dashboard, Icons.Outlined.Dashboard),
-                        TabItem("LeetCode", "leetcode", Icons.Filled.Code, Icons.Outlined.Code),
-                        TabItem("GitHub", "github", Icons.Filled.Source, Icons.Outlined.Source),
-                        TabItem("Insights", "insights", Icons.Filled.Analytics, Icons.Outlined.Analytics),
-                        TabItem("Settings", "settings", Icons.Filled.Settings, Icons.Outlined.Settings)
+                        TabItem("Stats", "stats", Icons.Filled.BarChart, Icons.Outlined.BarChart),
+                        TabItem("Repository", "repository", Icons.Filled.Folder, Icons.Outlined.Folder),
+                        TabItem("Profile", "profile", Icons.Filled.Person, Icons.Outlined.Person)
                     )
                     tabs.forEach { tab ->
                         val selected = activeTab == tab.route
@@ -174,30 +180,26 @@ fun MainLayout(
                             onNavigateToTab = { activeTab = it },
                             onShowAddGoal = { showAddGoalDialog = true }
                         )
-                        "leetcode" -> LeetCodeScreen(
-                            username = savedLeetcodeUser,
-                            stats = lcStatsState.value,
-                            recentSubmissions = lcSubmissionsState.value,
-                            isRefreshing = isRefreshing,
-                            onRefresh = { syncTrigger() }
-                        )
-                        "github" -> GitHubScreen(
-                            username = savedGithubUser,
-                            stats = ghStatsState.value,
-                            repositories = ghReposState.value,
-                            isRefreshing = isRefreshing,
-                            onRefresh = { syncTrigger() }
-                        )
-                        "insights" -> InsightsScreen(
-                            history = historyState.value,
-                            ghStats = ghStatsState.value,
+                        "stats" -> StatsScreen(
+                            savedGithubUser = savedGithubUser,
+                            savedLeetcodeUser = savedLeetcodeUser,
                             lcStats = lcStatsState.value,
+                            lcSubmissions = lcSubmissionsState.value,
+                            ghStats = ghStatsState.value,
+                            ghRepos = ghReposState.value,
+                            history = historyState.value,
                             goals = goalsState.value,
                             achievements = achievementsState.value,
+                            isRefreshing = isRefreshing,
+                            onRefresh = { syncTrigger() },
                             onDeleteGoal = { coroutineScope.launch { repository.deleteGoal(it) } },
                             onShowAddGoal = { showAddGoalDialog = true }
                         )
-                        "settings" -> SettingsScreen(
+                        "repository" -> RepositoryScreen(
+                            repository = repository,
+                            prefs = prefs
+                        )
+                        "profile" -> SettingsScreen(
                             prefs = prefs,
                             themeMode = themeMode,
                             onThemeChange = onThemeChange,
@@ -237,6 +239,9 @@ data class TabItem(val title: String, val route: String, val filledIcon: ImageVe
 fun LoginScreen(
     onLoginComplete: (githubUser: String, leetcodeUser: String, isGuestMode: Boolean) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     var githubInput by remember { mutableStateOf("") }
     var leetcodeInput by remember { mutableStateOf("") }
     var displayOAuthSim by remember { mutableStateOf(false) }
@@ -340,7 +345,11 @@ fun LoginScreen(
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
-                        onClick = { displayOAuthSim = true },
+                        onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            displayOAuthSim = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
@@ -356,6 +365,8 @@ fun LoginScreen(
 
                     OutlinedButton(
                         onClick = {
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
                             val gh = if (githubInput.isBlank()) "guest_developer" else githubInput
                             val lc = if (leetcodeInput.isBlank()) "guest_coder" else leetcodeInput
                             onLoginComplete(gh, lc, true)
@@ -391,6 +402,8 @@ fun LoginScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
                         displayOAuthSim = false
                         val gh = if (githubInput.isBlank()) "github_oauth_user" else githubInput
                         val lc = if (leetcodeInput.isBlank()) "leetcode_developer" else leetcodeInput
@@ -1541,6 +1554,184 @@ fun GitHubScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // GitHub Contribution Heatmap
+            Text(
+                text = "GitHub Contribution Grid",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text("50-Day Active Chronology", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val cells = stats.heatmapDataJson.split(",")
+                        .filter { it.contains(":") }
+                        .mapNotNull {
+                            val par = it.split(":")
+                            if (par.size == 2) par[0] to (par[1].toIntOrNull() ?: 1) else null
+                        }
+
+                    HeatmapGrid(cells = cells)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // GitHub Commits Per Day Details
+            Text(
+                text = "Daily Commits Timeline",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Daily contribution count tracked over time.", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    val cellsCommits = stats.commitsPerDayJson.split(",")
+                        .filter { it.contains(":") }
+                        .mapNotNull {
+                            val par = it.split(":")
+                            if (par.size == 2) par[0] to (par[1].toIntOrNull() ?: 0) else null
+                        }
+                        .sortedByDescending { it.first }
+                        .take(5)
+
+                    if (cellsCommits.isEmpty()) {
+                        Text("No active commits tracked.", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                    } else {
+                        cellsCommits.forEach { (date, count) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(date, fontWeight = FontWeight.SemiBold)
+                                }
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ) {
+                                    Text("$count commits", modifier = Modifier.padding(6.dp, 2.dp), fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // GitHub Easy, Medium, Hard solved
+            Text(
+                text = "Pushed Solutions Metrics",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier.size(90.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val strokeWidth = 10.dp.toPx()
+                            val total = (stats.easySolved + stats.mediumSolved + stats.hardSolved).toFloat()
+                            val easySweep = if (total > 0) (stats.easySolved / total) * 360f else 0f
+                            val mediumSweep = if (total > 0) (stats.mediumSolved / total) * 360f else 0f
+                            val hardSweep = if (total > 0) (stats.hardSolved / total) * 360f else 0f
+
+                            // Draw Easy arc (Green)
+                            drawArc(
+                                color = Color(0xFF10B981),
+                                startAngle = -90f,
+                                sweepAngle = easySweep,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth)
+                            )
+                            // Draw Medium arc (Orange)
+                            drawArc(
+                                color = Color(0xFFFBBF24),
+                                startAngle = -90f + easySweep,
+                                sweepAngle = mediumSweep,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth)
+                            )
+                            // Draw Hard arc (Red)
+                            drawArc(
+                                color = Color(0xFFEF4444),
+                                startAngle = -90f + easySweep + mediumSweep,
+                                sweepAngle = hardSweep,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth)
+                             )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = (stats.easySolved + stats.mediumSolved + stats.hardSolved).toString(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Solved",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 24.dp)
+                    ) {
+                        DistributionLegendRow("Easy Solved", stats.easySolved, Color(0xFF10B981))
+                        DistributionLegendRow("Medium Solved", stats.mediumSolved, Color(0xFFFBBF24))
+                        DistributionLegendRow("Hard Solved", stats.hardSolved, Color(0xFFEF4444))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // Highlighted Repositories list
             Text(
                 text = "Top Repositories Overview",
@@ -2221,4 +2412,1397 @@ fun GoalCategoryChip(
         onClick = onClick,
         label = { Text(text, fontSize = 11.sp) }
     )
+}
+
+// --- CONSOLIDATED STATS SCREEN (LAZY-LOADS LEETCODE, GITHUB & INSIGHTS SCREENS) ---
+@Composable
+fun StatsScreen(
+    savedGithubUser: String,
+    savedLeetcodeUser: String,
+    lcStats: LeetCodeStatsEntity?,
+    lcSubmissions: List<LeetCodeSubmissionCache>,
+    ghStats: GitHubStatsEntity?,
+    ghRepos: List<GitHubRepoCache>,
+    history: List<CodingHistoryEntity>,
+    goals: List<GoalEntity>,
+    achievements: List<AchievementEntity>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onDeleteGoal: (GoalEntity) -> Unit,
+    onShowAddGoal: () -> Unit
+) {
+    var selectedStatsTab by remember { mutableStateOf("leetcode") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TabRow(
+            selectedTabIndex = when (selectedStatsTab) {
+                "leetcode" -> 0
+                "github" -> 1
+                "insights" -> 2
+                else -> 0
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        ) {
+            Tab(
+                selected = selectedStatsTab == "leetcode",
+                onClick = { selectedStatsTab = "leetcode" },
+                text = { Text("LeetCode", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                modifier = Modifier.testTag("stats_tab_leetcode")
+            )
+            Tab(
+                selected = selectedStatsTab == "github",
+                onClick = { selectedStatsTab = "github" },
+                text = { Text("GitHub", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                modifier = Modifier.testTag("stats_tab_github")
+            )
+            Tab(
+                selected = selectedStatsTab == "insights",
+                onClick = { selectedStatsTab = "insights" },
+                text = { Text("Insights", fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                modifier = Modifier.testTag("stats_tab_insights")
+            )
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+            when (selectedStatsTab) {
+                "leetcode" -> LeetCodeScreen(
+                    username = savedLeetcodeUser,
+                    stats = lcStats,
+                    recentSubmissions = lcSubmissions,
+                    isRefreshing = isRefreshing,
+                    onRefresh = onRefresh
+                )
+                "github" -> GitHubScreen(
+                    username = savedGithubUser,
+                    stats = ghStats,
+                    repositories = ghRepos,
+                    isRefreshing = isRefreshing,
+                    onRefresh = onRefresh
+                )
+                "insights" -> InsightsScreen(
+                    history = history,
+                    ghStats = ghStats,
+                    lcStats = lcStats,
+                    goals = goals,
+                    achievements = achievements,
+                    onDeleteGoal = onDeleteGoal,
+                    onShowAddGoal = onShowAddGoal
+                )
+            }
+        }
+    }
+}
+
+
+// --- LEETCODE GITHUB SOLUTIONS REPOSITORY EXPLORER ---
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RepositoryScreen(
+    repository: CodePulseRepository,
+    prefs: CodePulsePrefs
+) {
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val githubToken by prefs.githubToken.collectAsState()
+    val selectedRepo by prefs.selectedRepo.collectAsState()
+
+    val topics by repository.getTopicsFlow().collectAsState(initial = emptyList())
+    val repoInfo by repository.getRepositoryInfoFlow().collectAsState(initial = null)
+    val favorites by repository.getFavoriteProblemsFlow().collectAsState(initial = emptyList())
+    val recentlyViewed by repository.getRecentlyViewedProblemsFlow().collectAsState(initial = emptyList())
+
+    // Nav Stack state: "dashboard", "topic_detail", "code_viewer"
+    var currentScreen by remember { mutableStateOf("dashboard") }
+    var selectedTopic by remember { mutableStateOf<String?>(null) }
+    var selectedProblem by remember { mutableStateOf<ProblemEntity?>(null) }
+
+    // Search state
+    var searchQuery by remember { mutableStateOf("") }
+    val searchResults by remember(searchQuery) {
+        if (searchQuery.isBlank()) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            repository.searchProblemsFlow(searchQuery)
+        }
+    }.collectAsState(initial = emptyList())
+
+    // Detailed topic list binding
+    val topicProblems by remember(selectedTopic) {
+        if (selectedTopic != null) {
+            repository.getProblemsByTopicFlow(selectedTopic!!)
+        } else {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        }
+    }.collectAsState(initial = emptyList())
+
+    // Syncing state
+    var isSyncing by remember { mutableStateOf(false) }
+
+    // Navigation back press handler helper
+    val handleBackPress = {
+        when (currentScreen) {
+            "code_viewer" -> {
+                currentScreen = "topic_detail"
+                selectedProblem = null
+            }
+            "topic_detail" -> {
+                currentScreen = "dashboard"
+                selectedTopic = null
+            }
+        }
+    }
+
+    if (githubToken.isBlank() && selectedRepo.isBlank()) {
+        // --- 1. LOGIN / ACCOUNT LINKING SCREEN ---
+        var manualRepoUrl by remember { mutableStateOf("") }
+        var manualToken by remember { mutableStateOf("") }
+        var errorMsg by remember { mutableStateOf("") }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0F141C)) // Dark Slate GitHub background
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(40.dp))
+                Icon(
+                    imageVector = Icons.Filled.FolderCopy,
+                    contentDescription = "Repo Icon",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(64.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "LeetCode Sync Explorer",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "Browse, search, and visualize your auto-pushed LeetCode repository solutions securely.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            // Real credential form
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                    border = BorderStroke(1.dp, Color(0xFF30363D))
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "Link GitHub Repository",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = manualRepoUrl,
+                            onValueChange = { manualRepoUrl = it; errorMsg = "" },
+                            label = { Text("Repository Path (owner/repo)") },
+                            placeholder = { Text("e.g., octocat/LeetCode-Solutions") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_repo_path"),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = manualToken,
+                            onValueChange = { manualToken = it; errorMsg = "" },
+                            label = { Text("GitHub Access Token (Optional)") },
+                            placeholder = { Text("For private repos or rate limit limits") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_repo_token"),
+                            singleLine = true
+                        )
+
+                        if (errorMsg.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = errorMsg,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Button(
+                            onClick = {
+                                if (manualRepoUrl.isBlank() || !manualRepoUrl.contains("/")) {
+                                    errorMsg = "Please enter a valid format: 'owner/repository_name'"
+                                    return@Button
+                                }
+                                isSyncing = true
+                                coroutineScope.launch {
+                                    try {
+                                        prefs.setGithubToken(manualToken.trim())
+                                        prefs.setSelectedRepo(manualRepoUrl.trim())
+                                        repository.syncRepository(
+                                            repoPath = manualRepoUrl.trim(),
+                                            token = manualToken.trim(),
+                                            isSimulating = false
+                                        )
+                                        currentScreen = "dashboard"
+                                    } catch (e: Exception) {
+                                        errorMsg = "Sync failed: ${e.localizedMessage ?: "Check network or token"}"
+                                        prefs.setGithubToken("")
+                                        prefs.setSelectedRepo("")
+                                    } finally {
+                                        isSyncing = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("btn_connect_repo"),
+                            enabled = !isSyncing
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White)
+                            } else {
+                                Icon(Icons.Filled.Link, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Connect Repository")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sandbox simulation mode
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22).copy(alpha = 0.8f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = "Sim Mode",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Interactive Sandbox Mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Instantly experience the repository explorer pre-populated with 50+ beautiful LeetCode solutions inside 11 custom folders (DP, Trees, Logic, SQL). Full syntax highlighter, favorites, search indexes, and ZIP downloads fully supported offline!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.LightGray,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                isSyncing = true
+                                coroutineScope.launch {
+                                    try {
+                                        prefs.setGithubToken("SANDBOX_TOKEN")
+                                        prefs.setSelectedRepo("guest_developer/LeetCode-Solutions")
+                                        repository.syncRepository(
+                                            repoPath = "guest_developer/LeetCode-Solutions",
+                                            token = "SANDBOX_TOKEN",
+                                            isSimulating = true
+                                        )
+                                        currentScreen = "dashboard"
+                                    } catch (e: Exception) {
+                                        errorMsg = "Failed sandbox: ${e.message}"
+                                    } finally {
+                                        isSyncing = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("btn_sandbox_mode"),
+                            enabled = !isSyncing,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Activate Sandbox Playground", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // --- AUTHENTICATED/SIMULATED VIEWS ---
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    navigationIcon = {
+                        if (currentScreen != "dashboard") {
+                            IconButton(onClick = handleBackPress) {
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = Color.White
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.FolderSpecial,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 12.dp)
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = when (currentScreen) {
+                                "dashboard" -> selectedRepo
+                                "topic_detail" -> selectedTopic ?: "Topic solutions"
+                                "code_viewer" -> selectedProblem?.title ?: "Solution Viewer"
+                                else -> "Repository Browser"
+                            },
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    actions = {
+                        if (currentScreen == "dashboard") {
+                            IconButton(
+                                onClick = {
+                                    isSyncing = true
+                                    coroutineScope.launch {
+                                        try {
+                                            repository.syncRepository(
+                                                repoPath = selectedRepo,
+                                                token = githubToken,
+                                                isSimulating = (githubToken == "SANDBOX_TOKEN")
+                                            )
+                                            Toast.makeText(context, "Repository Sync Complete", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Sync Failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isSyncing = false
+                                        }
+                                    }
+                                },
+                                enabled = !isSyncing
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.primary)
+                                } else {
+                                    Icon(Icons.Filled.Sync, contentDescription = "Sync", tint = Color.LightGray)
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        repository.disconnectRepo()
+                                        currentScreen = "dashboard"
+                                        selectedTopic = null
+                                        selectedProblem = null
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Filled.Logout, contentDescription = "Disconnect Repo", tint = Color.LightGray)
+                            }
+                        } else if (currentScreen == "topic_detail" && topicProblems.isNotEmpty()) {
+                            // Bulk Download current topic ZIP
+                            IconButton(
+                                onClick = {
+                                    bulkExportToZip(context, topicProblems, selectedTopic ?: "Topic")
+                                }
+                            ) {
+                                Icon(Icons.Filled.FileDownload, contentDescription = "Bulk ZIP Download", tint = Color.LightGray)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFF0F141C),
+                        titleContentColor = Color.White
+                    )
+                )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF0D1117)) // Dark canvas background
+                    .padding(paddingValues)
+            ) {
+                when (currentScreen) {
+                    "dashboard" -> {
+                        // --- A. MAIN REPOSITORY DASHBOARD SCREEN ---
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
+                        ) {
+                            // Metadata Card
+                            item {
+                                repoInfo?.let { info ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 16.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                        border = BorderStroke(1.dp, Color(0xFF30363D))
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.AccountTree,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "CONNECTED REPOSITORY METADATA",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.Gray,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(12.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Column {
+                                                    Text("Owner", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                    Text(info.owner, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                                }
+                                                Column {
+                                                    Text("Default Branch", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                    Text(info.defaultBranch, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                                }
+                                                Column {
+                                                    Text("Visibility", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                    Text(info.visibility, style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFF30363D))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = "Last synced: ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(info.lastSync))}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.LightGray
+                                                )
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        // Bulk Export Entire solution codebase
+                                                        coroutineScope.launch {
+                                                            val allProbs = repository.getFavoriteProblemsFlow().firstOrNull() ?: emptyList()
+                                                            Toast.makeText(context, "Compiling ZIP exports...", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                        bulkExportToZip(context, favorites + recentlyViewed, "All_Solutions")
+                                                    },
+                                                    modifier = Modifier.height(30.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                                                ) {
+                                                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(12.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Export Workspace", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Global Custom Search Bar
+                            item {
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    label = { Text("Search problems by ID, title, topic or language") },
+                                    placeholder = { Text("e.g. 70, Climbing Stairs, DP, Kotlin") },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 16.dp)
+                                        .testTag("search_solutions_field"),
+                                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = Color.Gray) },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) {
+                                                Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = Color.Gray)
+                                            }
+                                        }
+                                    },
+                                    singleLine = true
+                                )
+                            }
+
+                            if (searchQuery.isNotBlank()) {
+                                // Search Results dropdown layer
+                                if (searchResults.isEmpty()) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("No matches discovered for '$searchQuery'", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                } else {
+                                    items(searchResults) { prob ->
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 8.dp)
+                                                .clickable {
+                                                    coroutineScope.launch {
+                                                        repository.markRecentlyViewed(prob.id)
+                                                    }
+                                                    selectedProblem = prob
+                                                    selectedTopic = prob.topic
+                                                    currentScreen = "code_viewer"
+                                                },
+                                            colors = CardDefaults.cardColors(containerColor = Color(0xFF21262D))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    Icon(Icons.Filled.Code, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = "${prob.leetcodeId?.let { "$it. " } ?: ""}${prob.title}",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.White,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = "${prob.topic} > ${prob.language}",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = Color.Gray
+                                                        )
+                                                    }
+                                                }
+                                                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Color.Gray)
+                                            }
+                                        }
+                                    }
+                                }
+                                item { Spacer(modifier = Modifier.height(16.dp)) }
+                            }
+
+                            // Analytics charts
+                            item {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 20.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                    border = BorderStroke(1.dp, Color(0xFF30363D))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            text = "REPOSITORY INSIGHTS",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.Gray
+                                        )
+                                        Spacer(modifier = Modifier.height(14.dp))
+
+                                        // Total Solutions metrics
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column {
+                                                Text("Total Problems", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                Text("${repoInfo?.totalProblems ?: 0}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            Column {
+                                                Text("Topics Covered", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                Text("${repoInfo?.topicsCovered ?: 0}/11", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.secondary)
+                                            }
+                                            Column {
+                                                Text("Bookmark Favs", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                                Text("${favorites.size}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color(0xFFFFD700))
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(16.dp))
+
+                                        // SVG Progress Bar representation
+                                        Text("Topic Coverage Status", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        val coverageFraction = (repoInfo?.topicsCovered?.toFloat() ?: 0f) / 11f
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFF21262D))
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth(coverageFraction.coerceIn(0f, 1f))
+                                                    .background(
+                                                        Brush.horizontalGradient(
+                                                            listOf(
+                                                                MaterialTheme.colorScheme.primary,
+                                                                MaterialTheme.colorScheme.secondary
+                                                            )
+                                                        )
+                                                    )
+                                            )
+                                        }
+
+                                        // Language visual color bar
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text("Language Distribution", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(12.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                        ) {
+                                            // Java: green, Python: orange, C++: light blue, Kotlin: purple, Else: gray
+                                            Box(modifier = Modifier.weight(0.4f).fillMaxHeight().background(Color(0xFF2E7D32)))
+                                            Box(modifier = Modifier.weight(0.3f).fillMaxHeight().background(Color(0xFFEF6C00)))
+                                            Box(modifier = Modifier.weight(0.15f).fillMaxHeight().background(Color(0xFF1565C0)))
+                                            Box(modifier = Modifier.weight(0.1f).fillMaxHeight().background(Color(0xFF6A1B9A)))
+                                            Box(modifier = Modifier.weight(0.05f).fillMaxHeight().background(Color.Gray))
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF2E7D32)))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Java (40%)", fontSize = 10.sp, color = Color.LightGray)
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF6C00)))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Python (30%)", fontSize = 10.sp, color = Color.LightGray)
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF1565C0)))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("C++ (15%)", fontSize = 10.sp, color = Color.LightGray)
+                                            }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF6A1B9A)))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Kotlin (10%)", fontSize = 10.sp, color = Color.LightGray)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Topics category title
+                            item {
+                                Text(
+                                    text = "TOPICS & DIRECTORIES",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+                            }
+
+                            // Grid list of folder topics
+                            item {
+                                if (topics.isEmpty()) {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(24.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text("No Topic directories discovered.", color = Color.Gray)
+                                            Text("Try refreshing your repository link stats.", fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                    }
+                                } else {
+                                    Column {
+                                        topics.forEach { topic ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(bottom = 8.dp)
+                                                    .clickable {
+                                                        selectedTopic = topic.name
+                                                        currentScreen = "topic_detail"
+                                                    },
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                                border = BorderStroke(1.dp, Color(0xFF30363D))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(16.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.FolderOpen,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(24.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(14.dp))
+                                                        Column {
+                                                            Text(
+                                                                text = topic.name,
+                                                                style = MaterialTheme.typography.bodyLarge,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White
+                                                            )
+                                                            Text(
+                                                                text = "${topic.problemCount} solutions cached",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = Color.Gray
+                                                            )
+                                                        }
+                                                    }
+                                                    Icon(
+                                                        imageVector = Icons.Filled.ChevronRight,
+                                                        contentDescription = null,
+                                                        tint = Color.Gray
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Bookmarked / Favourites summary listing
+                            if (favorites.isNotEmpty()) {
+                                item {
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Text(
+                                        text = "VISUALLY BOOKMARKED SOLUTIONS (${favorites.size})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Yellow,
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                    LazyRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        items(favorites) { prob ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .width(160.dp)
+                                                    .clickable {
+                                                        selectedProblem = prob
+                                                        selectedTopic = prob.topic
+                                                        currentScreen = "code_viewer"
+                                                    },
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1D21)),
+                                                border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f))
+                                            ) {
+                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                    Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Filled.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(prob.language, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+                                                    }
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Text(
+                                                        text = prob.title,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(prob.topic, fontSize = 9.sp, color = Color.Gray)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // History Logs listing
+                            if (recentlyViewed.isNotEmpty()) {
+                                item {
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Text(
+                                        text = "RECENTLY REVIEWED",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                    Column {
+                                        recentlyViewed.take(6).forEach { prob ->
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(bottom = 6.dp)
+                                                    .clickable {
+                                                        selectedProblem = prob
+                                                        selectedTopic = prob.topic
+                                                        currentScreen = "code_viewer"
+                                                    },
+                                                colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(Icons.Filled.History, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = prob.title,
+                                                            fontSize = 12.sp,
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Text(prob.language, fontSize = 9.sp, color = Color.LightGray)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                }
+                            }
+                        }
+                    }
+
+                    "topic_detail" -> {
+                        // --- B. INDIVIDUAL TOPIC LIST VIEW ---
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                border = BorderStroke(1.dp, Color(0xFF30363D))
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(
+                                        text = "Topic Scope Overview",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        text = "Listing all parsed solution files discovered inside folder '/'${selectedTopic ?: ""}'. Tap any solution cell to view code offline inside standard Prism syntax highlighters.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.LightGray
+                                    )
+                                }
+                            }
+
+                            if (topicProblems.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("No cached solution files discoverable.", color = Color.Gray)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    items(topicProblems) { prob ->
+                                        val isFav = favorites.any { it.id == prob.id }
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    coroutineScope.launch {
+                                                        repository.markRecentlyViewed(prob.id)
+                                                    }
+                                                    selectedProblem = prob
+                                                    currentScreen = "code_viewer"
+                                                },
+                                            colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                            border = BorderStroke(1.dp, Color(0xFF30363D))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                    // Dynamic type icon
+                                                    Icon(
+                                                        imageVector = when (prob.language.lowercase()) {
+                                                            "java" -> Icons.Filled.Coffee
+                                                            "kotlin", "kt" -> Icons.Filled.DashboardCustomize
+                                                            "sql" -> Icons.Filled.Storage
+                                                            else -> Icons.Filled.IntegrationInstructions
+                                                        },
+                                                        contentDescription = null,
+                                                        tint = when (prob.language.lowercase()) {
+                                                            "java" -> Color(0xFF0073B7)
+                                                            "kotlin", "kt" -> Color(0xFF6200EE)
+                                                            "python", "py" -> Color(0xFFFF8800)
+                                                            "sql" -> Color(0xFFE65100)
+                                                            else -> Color.Gray
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = prob.title,
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color.White,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Row {
+                                                            Text(
+                                                                text = prob.language,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                fontWeight = FontWeight.SemiBold
+                                                            )
+                                                            if (prob.leetcodeId != null) {
+                                                                Spacer(modifier = Modifier.width(6.dp))
+                                                                Text(
+                                                                    text = "LC #${prob.leetcodeId}",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = Color.LightGray
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        coroutineScope.launch {
+                                                            repository.toggleFavorite(prob.id)
+                                                        }
+                                                    }
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                        contentDescription = "Starred",
+                                                        tint = if (isFav) Color(0xFFFFD700) else Color.Gray
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    item { Spacer(modifier = Modifier.height(20.dp)) }
+                                }
+                            }
+                        }
+                    }
+
+                    "code_viewer" -> {
+                        // --- C. CODE SOURCE DETAIL VIEWER ---
+                        selectedProblem?.let { prob ->
+                            val isFav = favorites.any { it.id == prob.id }
+
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Dynamic breadcrumbs & Title Header details bar
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                    border = BorderStroke(1.dp, Color(0xFF30363D))
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${prob.topic.uppercase()} > ${prob.language}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    coroutineScope.launch {
+                                                        repository.toggleFavorite(prob.id)
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isFav) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                    contentDescription = "Starred",
+                                                    tint = if (isFav) Color(0xFFFFD700) else Color.Gray,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "${prob.leetcodeId?.let { "$it. " } ?: ""}${prob.title}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+
+                                        Spacer(modifier = Modifier.height(14.dp))
+
+                                        // URL Generators Action buttons row
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            // 1. Interactive LeetCode website link launch
+                                            ElevatedButton(
+                                                onClick = {
+                                                    // Slug generation: "Two Sum" -> "two-sum"
+                                                    val slug = prob.title.lowercase()
+                                                        .replace("[^a-z0-9\\s-]".toRegex(), "")
+                                                        .replace("\\s+".toRegex(), "-")
+                                                        .trim()
+                                                    val url = "https://leetcode.com/problems/$slug"
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Cannot open browser URL", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f).height(36.dp),
+                                                contentPadding = PaddingValues(0.dp)
+                                            ) {
+                                                Icon(Icons.Filled.Launch, contentDescription = null, modifier = Modifier.size(12.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Open LeetCode", fontSize = 11.sp)
+                                            }
+
+                                            // 2. Raw GitHub code url launch
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val rawUrl = if (prob.downloadUrl.isNotBlank()) {
+                                                        prob.downloadUrl
+                                                    } else {
+                                                        "https://github.com/$selectedRepo/blob/main/${prob.githubPath}"
+                                                    }
+                                                    try {
+                                                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(rawUrl))
+                                                        context.startActivity(intent)
+                                                    } catch (e: Exception) {
+                                                        Toast.makeText(context, "Cannot open browser URL", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f).height(36.dp),
+                                                contentPadding = PaddingValues(0.dp),
+                                                border = BorderStroke(1.dp, Color(0xFF30363D))
+                                            ) {
+                                                Icon(Icons.Filled.Source, contentDescription = null, modifier = Modifier.size(12.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("GitHub Source", fontSize = 11.sp, color = Color.LightGray)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Syntax Colored Scrollable container box
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
+                                    border = BorderStroke(1.dp, Color(0xFF30363D))
+                                ) {
+                                    val codeText = prob.codeText.ifBlank {
+                                        "// Source Code cached locally for Offline viewing!\n// Problem: ${prob.title}\n// Language: ${prob.language}\n// Topic: ${prob.topic}\n\n// Solution file found in Repository: '${prob.githubPath}'\n// Click 'Download' or use Simulation mode to run syntax engines."
+                                    }
+
+                                    Box(modifier = Modifier.fillMaxSize()) {
+                                        // Auto Scroll side columns with row indices
+                                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                            // Line numbers column
+                                            val rowsCount = codeText.split("\n").size
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .background(Color(0xFF0F141C))
+                                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                                horizontalAlignment = Alignment.End
+                                            ) {
+                                                for (i in 1..rowsCount) {
+                                                    Text(
+                                                        text = "$i",
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = 11.sp,
+                                                        color = Color.DarkGray
+                                                    )
+                                                }
+                                            }
+
+                                            // Body solution source code
+                                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                                SyntaxColoredCode(code = codeText, language = prob.language)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Code Viewer Action Drawer (Copy, Download, Share)
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F141C))
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Copy Action
+                                        IconButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                                val clip = ClipData.newPlainText("LeetCode Solution", prob.codeText.ifBlank { "// Empty or Mock Code" })
+                                                clipboard.setPrimaryClip(clip)
+                                                Toast.makeText(context, "Source Code copied to clipboard", Toast.LENGTH_SHORT).show()
+                                            }
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = Color.LightGray)
+                                                Text("Copy", fontSize = 9.sp, color = Color.Gray)
+                                            }
+                                        }
+
+                                        // Individual Solution Download Action
+                                        IconButton(
+                                            onClick = {
+                                                try {
+                                                    val textToSave = prob.codeText.ifBlank { "// Solution for ${prob.title}" }
+                                                    val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+                                                    val saveFile = File(downloadsDir, prob.githubPath.substringAfterLast("/"))
+                                                    saveFile.parentFile?.mkdirs()
+                                                    saveFile.writeText(textToSave)
+                                                    Toast.makeText(context, "Saved Solution to System Downloads folder", Toast.LENGTH_SHORT).show()
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(context, "Save Exception: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(Icons.Filled.FileDownload, contentDescription = "Download", tint = Color.LightGray)
+                                                Text("Download", fontSize = 9.sp, color = Color.Gray)
+                                            }
+                                        }
+
+                                        // Share Action
+                                        IconButton(
+                                            onClick = {
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_SUBJECT, "LeetCode solution: ${prob.title}")
+                                                    putExtra(Intent.EXTRA_TEXT, "Here is my solution for '${prob.title}' in ${prob.language}:\n\n${prob.codeText}")
+                                                }
+                                                context.startActivity(Intent.createChooser(intent, "Share solution code"))
+                                            }
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(Icons.Filled.Share, contentDescription = "Share", tint = Color.LightGray)
+                                                Text("Share", fontSize = 9.sp, color = Color.Gray)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// --- HIGH-PERFORMANCE PRISM SYNTAX HIGHLIGHTING ENGINE ---
+@Composable
+fun SyntaxColoredCode(code: String, language: String) {
+    val annotatedString = remember(code, language) {
+        androidx.compose.ui.text.buildAnnotatedString {
+            val keywords = setOf(
+                "class", "interface", "struct", "impl", "pub", "fn", "fun", "val", "var",
+                "void", "int", "double", "float", "long", "char", "boolean", "bool",
+                "public", "private", "protected", "return", "if", "else", "for", "while",
+                "import", "package", "override", "null", "true", "false", "this", "new",
+                "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "ON", "AND", "OR", "AS", "def", "in", "elif"
+            )
+
+            append(code)
+
+            // Highlighting comments sequence
+            val commentRegex = Regex("(//.*|#.*)")
+            commentRegex.findAll(code).forEach { match ->
+                addStyle(
+                    style = androidx.compose.ui.text.SpanStyle(color = Color(0xFF6A9955)), // Green comments
+                    start = match.range.first,
+                    end = match.range.last + 1
+                )
+            }
+
+            // Highlighting strings literals
+            val stringRegex = Regex("(\"[^\"]*\"|'[^']*')")
+            stringRegex.findAll(code).forEach { match ->
+                addStyle(
+                    style = androidx.compose.ui.text.SpanStyle(color = Color(0xFFCE9178)), // Terracotta strings
+                    start = match.range.first,
+                    end = match.range.last + 1
+                )
+            }
+
+            // Highlighting standard compiler words
+            val words = Regex("[a-zA-Z0-9_]+")
+            words.findAll(code).forEach { match ->
+                val word = match.value
+                if (keywords.contains(word)) {
+                    addStyle(
+                        style = androidx.compose.ui.text.SpanStyle(
+                            color = Color(0xFF569CD6), // Accent Indigo keywords
+                            fontWeight = FontWeight.Bold
+                        ),
+                        start = match.range.first,
+                        end = match.range.last + 1
+                    )
+                } else if (word.firstOrNull()?.isUpperCase() == true) {
+                    addStyle(
+                        style = androidx.compose.ui.text.SpanStyle(color = Color(0xFF4EC9B0)), // Mint green classes
+                        start = match.range.first,
+                        end = match.range.last + 1
+                    )
+                } else if (word.toIntOrNull() != null) {
+                    addStyle(
+                        style = androidx.compose.ui.text.SpanStyle(color = Color(0xFFB5CEA8)), // Pale digits
+                        start = match.range.first,
+                        end = match.range.last + 1
+                    )
+                }
+            }
+        }
+    }
+
+    Text(
+        text = annotatedString,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        color = Color(0xFFD4D4D4), // VSCode Dark theme text
+        modifier = Modifier.padding(14.dp)
+    )
+}
+
+
+// --- UTILITY ZIP PACKER & FILES EXPORTER ---
+private fun bulkExportToZip(context: Context, problems: List<ProblemEntity>, selectionLabel: String) {
+    if (problems.isEmpty()) {
+        Toast.makeText(context, "No solution files available for compression", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    try {
+        val cacheDir = context.cacheDir
+        val safeLabel = selectionLabel.replace("[^a-zA-Z0-9]".toRegex(), "_")
+        val zipFile = File(cacheDir, "CodePulse_${safeLabel}_Solutions.zip")
+        if (zipFile.exists()) {
+            zipFile.delete()
+        }
+
+        java.util.zip.ZipOutputStream(java.io.FileOutputStream(zipFile)).use { zos ->
+            problems.forEach { prob ->
+                val codeText = prob.codeText.ifBlank {
+                    "// Solutions file: ${prob.title}\n// Topic: ${prob.topic}\n// Language: ${prob.language}\n"
+                }
+                val entryPath = "${prob.topic}/${prob.githubPath.substringAfterLast("/")}"
+                val entry = java.util.zip.ZipEntry(entryPath)
+                zos.putNextEntry(entry)
+                zos.write(codeText.toByteArray(Charsets.UTF_8))
+                zos.closeEntry()
+            }
+        }
+
+        // Generate sharable file Uri using provider
+        val authority = "com.example.fileprovider"
+        val zipUri = androidx.core.content.FileProvider.getUriForFile(context, authority, zipFile)
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, zipUri)
+            putExtra(Intent.EXTRA_SUBJECT, "CodePulse Solutions Code Codebase ZIP")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(Intent.createChooser(shareIntent, "Save or Export $selectionLabel LeetCode Solutions ZIP"))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Compilation Export Failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+    }
 }

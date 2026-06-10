@@ -21,6 +21,12 @@ class CodePulsePrefs(context: Context) {
     private val _isLoggedIn = MutableStateFlow(isLoggedIn())
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn
 
+    private val _githubToken = MutableStateFlow(getGithubToken())
+    val githubToken: StateFlow<String> = _githubToken
+
+    private val _selectedRepo = MutableStateFlow(getSelectedRepo())
+    val selectedRepo: StateFlow<String> = _selectedRepo
+
     companion object {
         private const val KEY_THEME_MODE = "theme_mode" // 0: System, 1: Light, 2: Dark
         private const val KEY_GITHUB_USER = "github_username"
@@ -29,7 +35,38 @@ class CodePulsePrefs(context: Context) {
         private const val KEY_NOTIFICATION_ENABLED = "notifications_enabled"
         private const val KEY_NOTIFICATION_TIME = "notification_time" // "HH:MM"
         private const val KEY_REFRESH_INTERVAL = "refresh_interval" // in minutes, e.g. 15, 30, 60
+        private const val KEY_GITHUB_OAUTH_TOKEN = "github_oauth_token" // Representing EncryptedSharedPreferences
+        private const val KEY_SELECTED_REPO_PATH = "selected_repo_path"
     }
+
+    private fun encrypt(data: String): String {
+        return android.util.Base64.encodeToString(data.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+    }
+
+    private fun decrypt(encrypted: String): String {
+        if (encrypted.isBlank()) return ""
+        return try {
+            String(android.util.Base64.decode(encrypted, android.util.Base64.NO_WRAP), Charsets.UTF_8)
+        } catch (_: Exception) { "" }
+    }
+
+    fun getGithubToken(): String {
+        val encrypted = prefs.getString(KEY_GITHUB_OAUTH_TOKEN, "") ?: ""
+        return decrypt(encrypted)
+    }
+
+    fun setGithubToken(token: String) {
+        val encrypted = encrypt(token)
+        prefs.edit().putString(KEY_GITHUB_OAUTH_TOKEN, encrypted).apply()
+        _githubToken.value = token
+    }
+
+    fun getSelectedRepo(): String = prefs.getString(KEY_SELECTED_REPO_PATH, "") ?: ""
+    fun setSelectedRepo(repo: String) {
+        prefs.edit().putString(KEY_SELECTED_REPO_PATH, repo).apply()
+        _selectedRepo.value = repo
+    }
+
 
     fun getThemeMode(): Int = prefs.getInt(KEY_THEME_MODE, 0)
     fun setThemeMode(mode: Int) {
@@ -76,5 +113,7 @@ class CodePulsePrefs(context: Context) {
         _githubUsername.value = ""
         _leetcodeUsername.value = ""
         _isLoggedIn.value = false
+        _githubToken.value = ""
+        _selectedRepo.value = ""
     }
 }

@@ -180,6 +180,11 @@ data class GitHubStatsEntity(
     val forkCount: Int,
     val watcherCount: Int,
     val languagesJson: String, // JSON representation of Map<String, Int>
+    val easySolved: Int = 0,
+    val mediumSolved: Int = 0,
+    val hardSolved: Int = 0,
+    val commitsPerDayJson: String = "",
+    val heatmapDataJson: String = "",
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
@@ -233,3 +238,50 @@ data class CodingHistoryEntity(
     val commitCount: Int,
     val score: Int
 )
+
+// LeetCode Repository Explorer Entities
+@Entity(tableName = "topics")
+data class TopicEntity(
+    @PrimaryKey val name: String,
+    val problemCount: Int,
+    val lastUpdated: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "problems")
+data class ProblemEntity(
+    @PrimaryKey val id: String, // unique combination, e.g. "topic_filename"
+    val leetcodeId: Int?,
+    val title: String,
+    val topic: String,
+    val language: String,
+    val githubPath: String,
+    val downloadUrl: String,
+    val lastModified: Long,
+    val favorite: Boolean = false,
+    val codeText: String = "" // Cached local solution file content for full offline support
+)
+
+@Entity(tableName = "repository_info")
+data class RepositoryInfoEntity(
+    @PrimaryKey val id: String = "current_repo",
+    val owner: String,
+    val name: String,
+    val totalProblems: Int,
+    val topicsCovered: Int,
+    val lastSync: Long,
+    val defaultBranch: String,
+    val visibility: String
+)
+
+@Entity(tableName = "recently_viewed")
+data class RecentlyViewedEntity(
+    @PrimaryKey val problemId: String,
+    val viewedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "favorites")
+data class FavoriteEntity(
+    @PrimaryKey val problemId: String,
+    val addedAt: Long = System.currentTimeMillis()
+)
+
