@@ -141,122 +141,15 @@ class CodePulseRepository(
             initialGoals.forEach { goalDao.insertGoal(it) }
         }
 
-        // Generate default history points if empty for dynamic charts
-        val historyList = mutableListOf<CodingHistoryEntity>()
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_YEAR, -14)
-        for (i in 1..14) {
-            val dateStr = sdf.format(cal.time)
-            val lcProblems = Random.nextInt(0, 3)
-            val commits = Random.nextInt(2, 10)
-            val score = (lcProblems * 20) + (commits * 5)
-            historyList.add(CodingHistoryEntity(dateStr, lcProblems, commits, score))
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        }
+        // Do not generate or seed any mock history points to ensure we use only actual/real data
+        val historyList = emptyList<CodingHistoryEntity>()
         codingHistoryDao.insertHistory(historyList)
 
-        // Prepopulate Vault repositories if empty
-        prepopulateVaultIfNeeded()
+        // Do not prepopulate any mock Vault repositories to ensure mock data is not used
     }
 
     private suspend fun prepopulateVaultIfNeeded() {
-        val existingVaultRepos = vaultRepositoryDao.getAllRepositoriesFlow().first()
-        if (existingVaultRepos.isEmpty()) {
-            val dsaRepo = VaultRepositoryEntity(
-                id = 1,
-                owner = "octocat",
-                repo = "dsa-notes",
-                displayName = "Data Structures & Algorithms Notes",
-                description = "Comprehensive notes on trees, graphs, sorting, searching, recursion, dynamic programming, and logic puzzles.",
-                isFavorite = true,
-                lastSyncTime = System.currentTimeMillis() - 3600000,
-                totalFiles = 8,
-                folderCount = 3,
-                sizeEstimate = 14500L,
-                topicsJson = "[\"algorithms\", \"data-structures\", \"cs-fundamentals\", \"interview-prep\"]",
-                languagesJson = "{\"Kotlin\":4500,\"Java\":3200,\"Python\":6800}",
-                mostUsedLanguage = "Python",
-                syncStatus = "SUCCESS",
-                lastCommitDate = "2026-06-09",
-                orderIndex = 0
-            )
-
-            val sysDesignRepo = VaultRepositoryEntity(
-                id = 2,
-                owner = "octocat",
-                repo = "system-design",
-                displayName = "System Design Guide",
-                description = "High-level architectural design checklists, horizontal scalability, load balancing, sharding, caching strategies, and CDN networks.",
-                isFavorite = false,
-                lastSyncTime = System.currentTimeMillis() - 7200000,
-                totalFiles = 5,
-                folderCount = 2,
-                sizeEstimate = 8200L,
-                topicsJson = "[\"system-design\", \"architecture\", \"microservices\", \"scalability\"]",
-                languagesJson = "{\"Markdown\":8200}",
-                mostUsedLanguage = "Markdown",
-                syncStatus = "SUCCESS",
-                lastCommitDate = "2026-06-08",
-                orderIndex = 1
-            )
-
-            val researchRepo = VaultRepositoryEntity(
-                id = 3,
-                owner = "octocat",
-                repo = "research-notes",
-                displayName = "AI Research Notes",
-                description = "Curation of technical papers, transformer models, diffusion parameters, vector database indexing, and fine-tuning guides.",
-                isFavorite = false,
-                lastSyncTime = System.currentTimeMillis() - 10800000,
-                totalFiles = 4,
-                folderCount = 1,
-                sizeEstimate = 12000L,
-                topicsJson = "[\"ai\", \"machine-learning\", \"transformers\", \"research\"]",
-                languagesJson = "{\"Python\":9500,\"Markdown\":2500}",
-                mostUsedLanguage = "Python",
-                syncStatus = "SUCCESS",
-                lastCommitDate = "2026-06-05",
-                orderIndex = 2
-            )
-
-            vaultRepositoryDao.insertRepository(dsaRepo)
-            vaultRepositoryDao.insertRepository(sysDesignRepo)
-            vaultRepositoryDao.insertRepository(researchRepo)
-
-            // Seed Files for DSA Notes
-            val dsaFiles = listOf(
-                VaultFileEntity("1_", 1, "Trees", "Trees", "", "dir"),
-                VaultFileEntity("1_Trees", 1, "BinarySearchTree.kt", "Trees/BinarySearchTree.kt", "Trees", "file", 920L, "Trees/BinarySearchTree.kt", "class BSTNode(val value: Int) {\n    var left: BSTNode? = null\n    var right: BSTNode? = null\n}"),
-                VaultFileEntity("1_Trees_LCA", 1, "LowestCommonAncestor.java", "Trees/LowestCommonAncestor.java", "Trees", "file", 850L, "Trees/LowestCommonAncestor.java", "public TreeNode lowestCommonAncestor(TreeNode root, TreeNode p, TreeNode q) {\n    if (root == null || root == p || root == q) return root;\n    TreeNode left = lowestCommonAncestor(root.left, p, q);\n    TreeNode right = lowestCommonAncestor(root.right, p, q);\n    return left == null ? right : (right == null ? left : root);\n}"),
-                VaultFileEntity("1_Graphs", 1, "Graphs", "Graphs", "", "dir"),
-                VaultFileEntity("1_Graphs_DFS", 1, "DepthFirstSearch.py", "Graphs/DepthFirstSearch.py", "Graphs", "file", 1200L, "Graphs/DepthFirstSearch.py", "def dfs(graph, start, visited=None):\n    if visited is None:\n        visited = set()\n    visited.add(start)\n    print(start)\n    for next in graph[start] - visited:\n        dfs(graph, next, visited)\n    return visited"),
-                VaultFileEntity("1_Graphs_Dijkstra", 1, "DijkstraShortestPath.go", "Graphs/DijkstraShortestPath.go", "Graphs", "file", 2500L, "Graphs/DijkstraShortestPath.go", "package main\n// Dijkstra's SSP algorithm for weighted graphs\nfunc Dijkstra(graph [][]Edge, source int) []int {\n    // Implementation details\n}"),
-                VaultFileEntity("1_Sorting", 1, "Sorting", "Sorting", "", "dir"),
-                VaultFileEntity("1_Sorting_Quick", 1, "QuickSort.py", "Sorting/QuickSort.py", "Sorting", "file", 610L, "Sorting/QuickSort.py", "def quicksort(arr):\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)"),
-                VaultFileEntity("1_Sorting_Merge", 1, "MergeSort.kt", "Sorting/MergeSort.kt", "Sorting", "file", 1800L, "Sorting/MergeSort.kt", "fun mergeSort(list: List<Int>): List<Int> {\n    if (list.size <= 1) return list\n    val middle = list.size / 2\n    val left = list.subList(0, middle)\n    val right = list.subList(middle, list.size)\n    return merge(mergeSort(left), mergeSort(right))\n}")
-            )
-
-            // Seed Files for System Design Guide
-            val sysDesignFiles = listOf(
-                VaultFileEntity("2_Architecture", 2, "Architecture", "Architecture", "", "dir"),
-                VaultFileEntity("2_Arch_Micro", 2, "MicroservicesOverview.md", "Architecture/MicroservicesOverview.md", "Architecture", "file", 4500L, "Architecture/MicroservicesOverview.md", "# Microservices Architecture\n\n*   **Decoupled Services**: Services are constructed independently based on domains.\n*   **API Gateway**: Unified edge routing with rate limiters and authentication tokens.\n*   **Service Discovery**: Consensus mapping via Consul or Eureka."),
-                VaultFileEntity("2_Arch_Clean", 2, "CleanArchitecturePatterns.md", "Architecture/CleanArchitecturePatterns.md", "Architecture", "file", 3200L, "Architecture/CleanArchitecturePatterns.md", "# Clean Architecture Principles\n\n*   **Entities**: Enterprise logic rules.\n*   **Use Cases**: Application-specific pathways.\n*   **Adapters**: Presenters, views, and repository databases."),
-                VaultFileEntity("2_Scalability", 2, "Scalability", "Scalability", "", "dir"),
-                VaultFileEntity("2_Scale_Load", 2, "LoadBalancingStrategies.md", "Scalability/LoadBalancingStrategies.md", "Scalability", "file", 2200L, "Scalability/LoadBalancingStrategies.md", "# Load Balancing Strategies\n\n1.  **Round Robin**: Sequentially route requests.\n2.  **Least Connections**: Prioritize servers handling fewer active workflows.\n3.  **IP Hash**: Ensure sticky session integrity.")
-            )
-
-            // Seed Files for ML Research Guide
-            val researchFiles = listOf(
-                VaultFileEntity("3_Models", 3, "Models", "Models", "", "dir"),
-                VaultFileEntity("3_Model_Trans", 3, "TransformerAesthetics.md", "Models/TransformerAesthetics.md", "Models", "file", 5000L, "Models/TransformerAesthetics.md", "# Inside Transformers\n\n*   **Self-Attention**: Computing keys, queries, and values.\n*   **Multi-Head Scaling**: Attending to multi-tier context projections.\n*   **Positional Sinusoids**: Feeding order arrays to invariant neural layers."),
-                VaultFileEntity("3_Model_Diff", 3, "DiffusionParameters.py", "Models/DiffusionParameters.py", "Models", "file", 4200L, "Models/DiffusionParameters.py", "# Gaussian diffusion coefficients scheduler\ndef linear_beta_schedule(timesteps):\n    beta_start = 0.0001\n    beta_end = 0.02\n    return torch.linspace(beta_start, beta_end, timesteps)")
-            )
-
-            vaultFileDao.insertFiles(dsaFiles)
-            vaultFileDao.insertFiles(sysDesignFiles)
-            vaultFileDao.insertFiles(researchFiles)
-        }
+        // Vault begins empty and authentic. The user connects real repositories dynamically.
     }
 
     private fun cleanLeetcodeUsername(input: String): String {
@@ -442,155 +335,36 @@ class CodePulseRepository(
                     )
                 }
                 gitHubEventDao.insertEvents(cacheEvents)
-            } else {
-                // If profile succeeded but events are empty (e.g. inactive user), generate simulated events to display something visually appealing
-                val rng = Random(username.hashCode())
-                val mockRepoNames = repos.take(5).map { it.name }
-                val eventTypes = listOf("PushEvent", "PullRequestEvent", "CreateEvent", "IssuesEvent", "WatchEvent")
-                val sdfEvent = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                val eventCal = Calendar.getInstance()
-                val mockEvents = (1..6).map {
-                    eventCal.add(Calendar.HOUR_OF_DAY, -rng.nextInt(1, 12))
-                    GitHubEventCache(
-                        username = username,
-                        type = eventTypes.random(rng),
-                        repoName = if (mockRepoNames.isNotEmpty()) "${username}/${mockRepoNames.random(rng)}" else "${username}/repository",
-                        createdAt = sdfEvent.format(eventCal.time)
-                    )
-                }
-                gitHubEventDao.insertEvents(mockEvents)
             }
-
         } catch (e: Exception) {
-            Log.w("CodePulseRepository", "Using simulated fallback for GitHub: $username due to: ${e.localizedMessage}")
-            // Fallback simulated profile based on username Hash Code to keep data consistent yet dynamic!
-            val rng = Random(username.hashCode())
-            val repoCount = rng.nextInt(15, 60)
-            val starCount = rng.nextInt(12, 450)
-            val languages = listOf("Kotlin", "TypeScript", "Python", "Swift", "Rust")
-            val selectedLangs = languages.shuffled(rng).take(3)
-            val langMap = mapOf(
-                selectedLangs[0] to rng.nextInt(40, 70),
-                selectedLangs[1] to rng.nextInt(20, 35),
-                selectedLangs[2] to rng.nextInt(5, 15)
-            )
-
-            val languagesJson = langMap.entries.joinToString(",") { "${it.key}:${it.value}" }
-
-            val easy = rng.nextInt(15, 65)
-            val medium = rng.nextInt(10, 45)
-            val hard = rng.nextInt(2, 12)
-
-            val finalHeatmapMap = mutableMapOf<String, Int>()
-            val curCal = Calendar.getInstance()
-            val datesdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            curCal.add(Calendar.DAY_OF_YEAR, -50)
-            for (i in 1..50) {
-                val dateStr = datesdf.format(curCal.time)
-                if (rng.nextFloat() > 0.4f) {
-                    finalHeatmapMap[dateStr] = rng.nextInt(1, 8)
-                }
-                curCal.add(Calendar.DAY_OF_YEAR, 1)
-            }
-            val heatmapJson = finalHeatmapMap.entries.joinToString(",") { "${it.key}:${it.value}" }
-
-            val mockProfile = GitHubStatsEntity(
-                username = username,
-                avatarUrl = "https://picsum.photos/seed/$username/150",
-                name = username.replaceFirstChar { it.titlecase() },
-                bio = "Full-stack enthusiast crafting custom architectures daily. Star count of $starCount across $repoCount projects.",
-                followers = rng.nextInt(30, 1500),
-                following = rng.nextInt(50, 400),
-                publicRepos = repoCount,
-                totalStars = starCount,
-                forkCount = rng.nextInt(5, 75),
-                watcherCount = rng.nextInt(10, 120),
-                languagesJson = languagesJson,
-                easySolved = easy,
-                mediumSolved = medium,
-                hardSolved = hard,
-                commitsPerDayJson = heatmapJson,
-                heatmapDataJson = heatmapJson
-            )
-            gitHubStatsDao.insertStats(mockProfile)
-
-            gitHubRepoDao.clearRepos(username)
-            val repoNames = listOf(
-                "codepulse-dashboard", "android-clean-architecture", "gemini-copilot", 
-                "quantum-ledger", "neural-flow-compiler", "react-native-ambient", 
-                "rust-database-engine", "swiftui-canvas-physics"
-            )
-            val mockRepos = repoNames.map { repoBase ->
-                GitHubRepoCache(
-                    username = username,
-                    name = repoBase,
-                    description = "Custom engineered high-performance repository crafted for $repoBase utility.",
-                    stars = rng.nextInt(2, 100),
-                    forks = rng.nextInt(1, 30),
-                    watchers = rng.nextInt(1, 40),
-                    language = selectedLangs.random(rng),
-                    htmlUrl = "https://github.com/example/$repoBase"
-                )
-            }
-            gitHubRepoDao.insertRepos(mockRepos)
-
-            // Dynamic event generation for simulated view
-            val eventTypes = listOf("PushEvent", "PullRequestEvent", "CreateEvent", "IssuesEvent", "WatchEvent")
-            val sdfEvent = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-            val eventCal = Calendar.getInstance()
-            val mockEvents = (1..10).map {
-                eventCal.add(Calendar.HOUR_OF_DAY, -rng.nextInt(1, 12))
-                GitHubEventCache(
-                    username = username,
-                    type = eventTypes.random(rng),
-                    repoName = "${username}/${repoNames.random(rng)}",
-                    createdAt = sdfEvent.format(eventCal.time)
-                )
-            }
-            gitHubEventDao.clearEvents(username)
-            gitHubEventDao.insertEvents(mockEvents)
+            Log.e("CodePulseRepository", "GitHub fetch failed for: $username", e)
+            throw e
         }
     }
 
     private suspend fun fetchRealOrSimulatedLeetCode(username: String) {
         if (username.isBlank()) return
 
-        val rng = Random(username.hashCode() + 1)
+        // 1. Fetch real API profiles and let exceptions bubble up naturally (no mock fallbacks)
+        val realProfile = leetcodeService.getUserProfile(username)
+        val realSolved = leetcodeService.getUserSolved(username)
+        val realCalendar = leetcodeService.getUserCalendar(username)
 
-        // 1. Profile information (ranking, reputation, avatar)
-        val realProfile = try {
-            leetcodeService.getUserProfile(username)
-        } catch (e: Exception) {
-            Log.w("CodePulseRepository", "Failed to fetch LeetCode profile for $username: ${e.localizedMessage}")
-            null
-        }
-        val rank = realProfile?.ranking ?: rng.nextInt(50000, 500000)
-        val rep = realProfile?.reputation ?: rng.nextInt(10, 300)
-        val avatar = if (!realProfile?.avatar.isNullOrBlank()) realProfile.avatar!! else "https://picsum.photos/seed/leetcode_$username/150"
+        val rank = realProfile.ranking ?: 0
+        val rep = realProfile.reputation ?: 0
+        val avatar = if (!realProfile.avatar.isNullOrBlank()) realProfile.avatar!! else ""
 
-        // 2. Solved categories (easy, medium, hard, total)
-        val realSolved = try {
-            leetcodeService.getUserSolved(username)
-        } catch (e: Exception) {
-            Log.w("CodePulseRepository", "Failed to fetch LeetCode solved count for $username: ${e.localizedMessage}")
-            null
-        }
-        val easy = realSolved?.easySolved ?: rng.nextInt(35, 150)
-        val medium = realSolved?.mediumSolved ?: rng.nextInt(20, 220)
-        val hard = realSolved?.hardSolved ?: rng.nextInt(5, 50)
-        val total = realSolved?.solvedProblem ?: (easy + medium + hard)
+        // 2. Solved categories
+        val easy = realSolved.easySolved ?: 0
+        val medium = realSolved.mediumSolved ?: 0
+        val hard = realSolved.hardSolved ?: 0
+        val total = realSolved.solvedProblem ?: (easy + medium + hard)
 
         // 3. Streak and active days from calendar
-        val realCalendar = try {
-            leetcodeService.getUserCalendar(username)
-        } catch (e: Exception) {
-            Log.w("CodePulseRepository", "Failed to fetch LeetCode calendar for $username: ${e.localizedMessage}")
-            null
-        }
-        val streak = realCalendar?.streak ?: rng.nextInt(1, 45)
-        val longStreak = maxOf(streak, realCalendar?.totalActiveDays ?: rng.nextInt(20, 95))
+        val streak = realCalendar.streak ?: 0
+        val longStreak = maxOf(streak, realCalendar.totalActiveDays ?: 0)
 
-        val heatmapJson = if (realCalendar != null && !realCalendar.submissionCalendar.isNullOrBlank()) {
+        val heatmapJson = if (!realCalendar.submissionCalendar.isNullOrBlank()) {
             try {
                 val calendarMap = mutableMapOf<String, Int>()
                 val sdfDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -623,23 +397,6 @@ class CodePulseRepository(
             ""
         }
 
-        val finalHeatmapJson = if (heatmapJson.isNotBlank()) {
-            heatmapJson
-        } else {
-            val mockHeatmap = mutableMapOf<String, Int>()
-            val dateSdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val curCal = Calendar.getInstance()
-            curCal.add(Calendar.DAY_OF_YEAR, -50)
-            for (i in 1..50) {
-                val dateStr = dateSdf.format(curCal.time)
-                if (rng.nextFloat() > 0.4f) {
-                    mockHeatmap[dateStr] = rng.nextInt(1, 6)
-                }
-                curCal.add(Calendar.DAY_OF_YEAR, 1)
-            }
-            mockHeatmap.entries.joinToString(",") { "${it.key}:${it.value}" }
-        }
-
         // 4. Contest Rating
         val realContest = try {
             leetcodeService.getUserContest(username)
@@ -647,11 +404,10 @@ class CodePulseRepository(
             Log.w("CodePulseRepository", "Failed to fetch LeetCode contest details for $username: ${e.localizedMessage}")
             null
         }
-        val rating = realContest?.contestRating?.toInt() ?: rng.nextInt(1400, 2400)
-        val globalRank = realContest?.contestGlobalRanking ?: rng.nextInt(2000, 80000)
-        val attended = realContest?.contestAttend ?: rng.nextInt(1, 30)
+        val rating = realContest?.contestRating?.toInt() ?: 0
+        val globalRank = realContest?.contestGlobalRanking ?: 0
+        val attended = realContest?.contestAttend ?: 0
 
-        // Rating Evolution JSON
         val ratingHistory = if (realContest != null && !realContest.contestParticipation.isNullOrEmpty()) {
             val history = realContest.contestParticipation!!.filter { it.attended == true && it.rating != null && it.contest != null }
             if (history.isNotEmpty()) {
@@ -660,14 +416,10 @@ class CodePulseRepository(
                 }
                 listStrings.joinToString(",", prefix = "[", postfix = "]")
             } else {
-                (1..attended).map { step ->
-                    "{\"contest\":\"Weekly Contest $step\",\"rating\":${1400 + (rating - 1400) * step / attended}}"
-                }.joinToString(",", prefix = "[", postfix = "]")
+                "[]"
             }
         } else {
-            (1..attended).map { step ->
-                "{\"contest\":\"Weekly Contest $step\",\"rating\":${1400 + (rating - 1400) * step / attended}}"
-            }.joinToString(",", prefix = "[", postfix = "]")
+            "[]"
         }
 
         // Try to fetch real submission history from the LeetCode API service
@@ -695,35 +447,11 @@ class CodePulseRepository(
                 emptyList()
             }
         } catch (e: Exception) {
-            Log.w("CodePulseRepository", "LeetCode submissions fetch from API failed: ${e.localizedMessage}, using high-fidelity simulations")
+            Log.w("CodePulseRepository", "LeetCode submissions fetch from API failed: ${e.localizedMessage}")
             emptyList()
         }
 
-        // If the API returned no results or failed, generate high-fidelity simulated submissions to keep UI elegant
-        val finalSubmissions = if (submissionsList.isNotEmpty()) {
-            submissionsList
-        } else {
-            val topics = listOf(
-                "Two Sum" to "Accepted", "Add Two Numbers" to "Accepted", "Median of Two Sorted Arrays" to "Wrong Answer",
-                "Longest Palindromic Substring" to "Accepted", "Reverse Integer" to "Accepted", "Container With Most Water" to "Accepted",
-                "3Sum" to "Time Limit Exceeded", "Letter Combinations of a Phone Number" to "Accepted", "Merge k Sorted Lists" to "Accepted"
-            )
-            val languages = listOf("Kotlin", "Java", "C++", "Python", "Go")
-            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-            val cal = Calendar.getInstance()
-
-            (1..10).map {
-                val topicPair = topics.random(rng)
-                cal.add(Calendar.HOUR_OF_DAY, -rng.nextInt(1, 10))
-                LeetCodeSubmissionCache(
-                    username = username,
-                    title = topicPair.first,
-                    status = topicPair.second,
-                    language = languages.random(rng),
-                    submissionDate = sdf.format(cal.time)
-                )
-            }
-        }
+        val finalSubmissions = submissionsList
 
         val entity = LeetCodeStatsEntity(
             username = username,
@@ -734,20 +462,22 @@ class CodePulseRepository(
             mediumSolved = medium,
             hardSolved = hard,
             totalSolved = total,
-            acceptanceRate = rng.nextDouble(45.0, 72.5),
+            acceptanceRate = if (total > 0) (easy + medium + hard).toDouble() / total.toDouble() * 100.0 else 0.0,
             currentStreak = streak,
             longestStreak = longStreak,
             contestRating = rating,
             globalRanking = globalRank,
             contestAttended = attended,
             ratingHistoryJson = ratingHistory,
-            heatmapDataJson = finalHeatmapJson
+            heatmapDataJson = heatmapJson
         )
 
         leetCodeStatsDao.insertStats(entity)
 
         leetCodeSubmissionDao.clearSubmissions(username)
-        leetCodeSubmissionDao.insertSubmissions(finalSubmissions)
+        if (finalSubmissions.isNotEmpty()) {
+            leetCodeSubmissionDao.insertSubmissions(finalSubmissions)
+        }
     }
 
     suspend fun evaluateGoalsAndAchievements() = withContext(Dispatchers.IO) {

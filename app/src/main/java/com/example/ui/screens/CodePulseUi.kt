@@ -2583,6 +2583,9 @@ fun RepositoryScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val githubUsername by prefs.githubUsername.collectAsState()
+    val userCachedRepos by remember(githubUsername) { repository.getGitHubReposFlow(githubUsername) }.collectAsState(initial = emptyList())
+
     val githubToken by prefs.githubToken.collectAsState()
     val selectedRepo by prefs.selectedRepo.collectAsState()
 
@@ -2668,6 +2671,98 @@ fun RepositoryScreen(
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
                 Spacer(modifier = Modifier.height(32.dp))
+            }
+
+            // Real repository picker/selector from account
+            if (githubUsername.isNotBlank() && userCachedRepos.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Select from loaded repositories under $githubUsername:",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    )
+                    
+                    userCachedRepos.forEach { repo ->
+                        val targetPath = "${githubUsername}/${repo.name}"
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                                .clickable {
+                                    manualRepoUrl = targetPath
+                                    errorMsg = ""
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (manualRepoUrl.trim().lowercase() == targetPath.trim().lowercase()) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                                } else {
+                                    Color(0xFF161B22)
+                                }
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (manualRepoUrl.trim().lowercase() == targetPath.trim().lowercase()) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color(0xFF30363D)
+                                }
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Folder,
+                                    contentDescription = "Repository",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = repo.name,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    if (!repo.description.isNullOrBlank()) {
+                                        Text(
+                                            text = repo.description,
+                                            color = Color.LightGray,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                if (repo.stars > 0) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Star,
+                                            contentDescription = "Stars",
+                                            tint = Color(0xFFF1C40F),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = repo.stars.toString(),
+                                            color = Color.LightGray,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
             }
 
             // Real credential form
@@ -2763,71 +2858,6 @@ fun RepositoryScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Connect Repository")
                             }
-                        }
-                    }
-                }
-            }
-
-            // Sandbox simulation mode
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22).copy(alpha = 0.8f)),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-                ) {
-                    Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "Sim Mode",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Interactive Sandbox Mode",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Instantly experience the repository explorer pre-populated with 50+ beautiful LeetCode solutions inside 11 custom folders (DP, Trees, Logic, SQL). Full syntax highlighter, favorites, search indexes, and ZIP downloads fully supported offline!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.LightGray,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                isSyncing = true
-                                coroutineScope.launch {
-                                    try {
-                                        prefs.setGithubToken("SANDBOX_TOKEN")
-                                        prefs.setSelectedRepo("guest_developer/LeetCode-Solutions")
-                                        repository.syncRepository(
-                                            repoPath = "guest_developer/LeetCode-Solutions",
-                                            token = "SANDBOX_TOKEN",
-                                            isSimulating = true
-                                        )
-                                        currentScreen = "dashboard"
-                                    } catch (e: Exception) {
-                                        errorMsg = "Failed sandbox: ${e.message}"
-                                    } finally {
-                                        isSyncing = false
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                                .testTag("btn_sandbox_mode"),
-                            enabled = !isSyncing,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("Activate Sandbox Playground", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
