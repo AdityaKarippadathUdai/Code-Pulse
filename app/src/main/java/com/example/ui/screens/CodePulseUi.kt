@@ -3571,6 +3571,26 @@ fun RepositoryScreen(
                         // --- C. CODE SOURCE DETAIL VIEWER ---
                         selectedProblem?.let { prob ->
                             val isFav = favorites.any { it.id == prob.id }
+                            
+                            var isDownloadingCode by remember(prob.id) { mutableStateOf(false) }
+                            val liveProblemFlow = remember(prob.id) {
+                                repository.getProblemByIdFlow(prob.id)
+                            }
+                            val liveProblem by liveProblemFlow.collectAsState(initial = prob)
+                            val currentProb = liveProblem ?: prob
+
+                            LaunchedEffect(currentProb.id) {
+                                if (currentProb.codeText.isBlank() && githubToken != "SANDBOX_TOKEN" && githubToken.isNotBlank()) {
+                                    isDownloadingCode = true
+                                    try {
+                                        repository.syncProblemCodeContent(currentProb.id, githubToken)
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("CodePulseUi", "Could not load actual problem code", e)
+                                    } finally {
+                                        isDownloadingCode = false
+                                    }
+                                }
+                            }
 
                             Column(modifier = Modifier.fillMaxSize()) {
                                 // Dynamic breadcrumbs & Title Header details bar
@@ -3588,7 +3608,7 @@ fun RepositoryScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "${prob.topic.uppercase()} > ${prob.language}",
+                                                text = "${currentProb.topic.uppercase()} > ${currentProb.language}",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.secondary,
                                                 fontWeight = FontWeight.SemiBold
@@ -3596,7 +3616,7 @@ fun RepositoryScreen(
                                             IconButton(
                                                 onClick = {
                                                     coroutineScope.launch {
-                                                        repository.toggleFavorite(prob.id)
+                                                        repository.toggleFavorite(currentProb.id)
                                                     }
                                                 }
                                             ) {
@@ -3610,7 +3630,7 @@ fun RepositoryScreen(
                                         }
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "${prob.leetcodeId?.let { "$it. " } ?: ""}${prob.title}",
+                                            text = "${currentProb.leetcodeId?.let { "$it. " } ?: ""}${currentProb.title}",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -3627,7 +3647,7 @@ fun RepositoryScreen(
                                             ElevatedButton(
                                                 onClick = {
                                                     // Slug generation: "Two Sum" -> "two-sum"
-                                                    val slug = prob.title.lowercase()
+                                                    val slug = currentProb.title.lowercase()
                                                         .replace("[^a-z0-9\\s-]".toRegex(), "")
                                                         .replace("\\s+".toRegex(), "-")
                                                         .trim()
@@ -3650,10 +3670,10 @@ fun RepositoryScreen(
                                             // 2. Raw GitHub code url launch
                                             OutlinedButton(
                                                 onClick = {
-                                                    val rawUrl = if (prob.downloadUrl.isNotBlank()) {
-                                                        prob.downloadUrl
+                                                    val rawUrl = if (currentProb.downloadUrl.isNotBlank()) {
+                                                        currentProb.downloadUrl
                                                     } else {
-                                                        "https://github.com/$selectedRepo/blob/main/${prob.githubPath}"
+                                                        "https://github.com/$selectedRepo/blob/main/${currentProb.githubPath}"
                                                     }
                                                     try {
                                                         val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(rawUrl))
@@ -3683,35 +3703,50 @@ fun RepositoryScreen(
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161B22)),
                                     border = BorderStroke(1.dp, Color(0xFF30363D))
                                 ) {
-                                    val codeText = prob.codeText.ifBlank {
-                                        "// Source Code cached locally for Offline viewing!\n// Problem: ${prob.title}\n// Language: ${prob.language}\n// Topic: ${prob.topic}\n\n// Solution file found in Repository: '${prob.githubPath}'\n// Click 'Download' or use Simulation mode to run syntax engines."
-                                    }
+                                    if (isDownloadingCode) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize().padding(32.dp),
+                                            verticalArrangement = Arrangement.Center,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            CircularProgressIndicator(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(36.dp)
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            Text("Downloading live codebase file from GitHub...", color = Color.Gray, fontSize = 13.sp)
+                                        }
+                                    } else {
+                                        val codeText = currentProb.codeText.ifBlank {
+                                            "// Source code cached locally for Offline viewing!\n// File found in Repository: '${currentProb.githubPath}'\n// Ensure you have configured a valid GitHub personal access token (PAT), or reload containing actual repository folders."
+                                        }
 
-                                    Box(modifier = Modifier.fillMaxSize()) {
-                                        // Auto Scroll side columns with row indices
-                                        Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                                            // Line numbers column
-                                            val rowsCount = codeText.split("\n").size
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxHeight()
-                                                    .background(Color(0xFF0F141C))
-                                                    .padding(vertical = 12.dp, horizontal = 8.dp),
-                                                horizontalAlignment = Alignment.End
-                                            ) {
-                                                for (i in 1..rowsCount) {
-                                                    Text(
-                                                        text = "$i",
-                                                        fontFamily = FontFamily.Monospace,
-                                                        fontSize = 11.sp,
-                                                        color = Color.DarkGray
-                                                    )
+                                        Box(modifier = Modifier.fillMaxSize()) {
+                                            // Auto Scroll side columns with row indices
+                                            Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                                // Line numbers column
+                                                val rowsCount = codeText.split("\n").size
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxHeight()
+                                                        .background(Color(0xFF0F141C))
+                                                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                                                    horizontalAlignment = Alignment.End
+                                                ) {
+                                                    for (i in 1..rowsCount) {
+                                                        Text(
+                                                            text = "$i",
+                                                            fontFamily = FontFamily.Monospace,
+                                                            fontSize = 11.sp,
+                                                            color = Color.DarkGray
+                                                        )
+                                                    }
                                                 }
-                                            }
 
-                                            // Body solution source code
-                                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                                                SyntaxColoredCode(code = codeText, language = prob.language)
+                                                // Body solution source code
+                                                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                                    SyntaxColoredCode(code = codeText, language = currentProb.language)
+                                                }
                                             }
                                         }
                                     }
@@ -3735,7 +3770,7 @@ fun RepositoryScreen(
                                         IconButton(
                                             onClick = {
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                val clip = ClipData.newPlainText("LeetCode Solution", prob.codeText.ifBlank { "// Empty or Mock Code" })
+                                                val clip = ClipData.newPlainText("LeetCode Solution", currentProb.codeText.ifBlank { "// Empty or Mock Code" })
                                                 clipboard.setPrimaryClip(clip)
                                                 Toast.makeText(context, "Source Code copied to clipboard", Toast.LENGTH_SHORT).show()
                                             }
@@ -3750,9 +3785,9 @@ fun RepositoryScreen(
                                         IconButton(
                                             onClick = {
                                                 try {
-                                                    val textToSave = prob.codeText.ifBlank { "// Solution for ${prob.title}" }
+                                                    val textToSave = currentProb.codeText.ifBlank { "// Solution for ${currentProb.title}" }
                                                     val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
-                                                    val saveFile = File(downloadsDir, prob.githubPath.substringAfterLast("/"))
+                                                    val saveFile = File(downloadsDir, currentProb.githubPath.substringAfterLast("/"))
                                                     saveFile.parentFile?.mkdirs()
                                                     saveFile.writeText(textToSave)
                                                     Toast.makeText(context, "Saved Solution to System Downloads folder", Toast.LENGTH_SHORT).show()
@@ -3772,8 +3807,8 @@ fun RepositoryScreen(
                                             onClick = {
                                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                                     type = "text/plain"
-                                                    putExtra(Intent.EXTRA_SUBJECT, "LeetCode solution: ${prob.title}")
-                                                    putExtra(Intent.EXTRA_TEXT, "Here is my solution for '${prob.title}' in ${prob.language}:\n\n${prob.codeText}")
+                                                    putExtra(Intent.EXTRA_SUBJECT, "LeetCode solution: ${currentProb.title}")
+                                                    putExtra(Intent.EXTRA_TEXT, "Here is my solution for '${currentProb.title}' in ${currentProb.language}:\n\n${currentProb.codeText}")
                                                 }
                                                 context.startActivity(Intent.createChooser(intent, "Share solution code"))
                                             }

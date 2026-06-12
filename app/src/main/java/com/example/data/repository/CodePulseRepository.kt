@@ -1022,5 +1022,62 @@ class CodePulseRepository(
             Log.e("CodePulseRepository", "Error downloading vault file content: ${e.message}", e)
         }
     }
+
+    suspend fun syncProblemCodeContent(problemId: String, token: String? = null) = withContext(Dispatchers.IO) {
+        val problem = problemDao.getProblemById(problemId) ?: return@withContext
+        val authHeader = if (!token.isNullOrBlank()) {
+            if (token.startsWith("token ") || token.startsWith("Bearer ")) token else "token $token"
+        } else null
+        val repoInfo = repositoryInfoDao.getInfo() ?: return@withContext
+
+        try {
+            var codeContent: String? = null
+
+            // 1. Try to download via GitHub API Contents Endpoint
+            try {
+                val response = githubService.downloadRawFile(
+                    url = "https://api.github.com/repos/${repoInfo.owner}/${repoInfo.name}/contents/${problem.githubPath}",
+                    authHeader = authHeader
+                )
+                codeContent = response.string()
+                Log.d("CodePulseRepository", "Successfully fetched problem file via GitHub Content API: ${problem.githubPath}")
+            } catch (e: Exception) {
+                Log.e("CodePulseRepository", "GitHub Content API failed for problem ${problem.githubPath}: ${e.message}")
+            }
+
+            // 2. Fallback to raw download URL
+            if (codeContent == null && problem.downloadUrl.isNotBlank()) {
+                val request = okhttp3.Request.Builder()
+                    .url(problem.downloadUrl)
+                    .apply {
+                        if (authHeader != null) {
+                            addHeader("Authorization", authHeader)
+                        }
+                    }
+                    .build()
+
+                val localClient = OkHttpClient.Builder()
+                    .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.NONE })
+                    .build()
+
+                localClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        codeContent = response.body?.string() ?: ""
+                        Log.d("CodePulseRepository", "Successfully fetched problem via raw downloadUrl: ${problem.githubPath}")
+                    } else {
+                        Log.e("CodePulseRepository", "Raw download URL returned status code: ${response.code}")
+                    }
+                }
+            }
+
+            if (codeContent != null) {
+                problemDao.updateProblem(problem.copy(codeText = codeContent))
+            } else {
+                Log.e("CodePulseRepository", "Failed to retrieve any content for problem: ${problem.githubPath}")
+            }
+        } catch (e: Exception) {
+            Log.e("CodePulseRepository", "Error syncing problem code content", e)
+        }
+    }
 }
 
